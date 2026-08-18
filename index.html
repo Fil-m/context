@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b0e14">
+<title>CONTEXT — Контекст</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#0b0e14; color:#dfe6f2;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #cv { position:fixed; inset:0; display:block; }
+  /* ---------- top bar ---------- */
+  #top { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:6px;
+    padding:6px 8px; background:rgba(11,14,20,.82); backdrop-filter:blur(6px); z-index:10; flex-wrap:wrap; }
+  #tname { font-size:13px; font-weight:700; letter-spacing:2px; color:#4cc9f0; margin-right:4px; white-space:nowrap; }
+  #tname span { color:#7b8aa3; font-weight:500; letter-spacing:0; font-size:11px; }
+  .btn { min-width:38px; height:38px; padding:0 9px; border-radius:10px; border:1px solid #2c3a55;
+    background:#141b2a; color:#b9c6dd; font-size:14px; display:inline-flex; align-items:center; justify-content:center;
+    cursor:pointer; }
+  .btn:active { background:#223049; }
+  .btn.on { border-color:#4cc9f0; color:#4cc9f0; background:#0f2433; }
+  .btn.pause { border-color:#fca311; color:#fca311; }
+  #bRow2 { display:flex; gap:6px; }
+  /* ---------- objective ---------- */
+  #obj { position:fixed; top:52px; left:50%; transform:translateX(-50%); z-index:9;
+    background:rgba(18,23,34,.85); border:1px solid #2c3a55; border-radius:12px; padding:6px 14px;
+    font-size:12.5px; color:#9fb0cc; max-width:92%; text-align:center; pointer-events:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  /* ---------- log ---------- */
+  #log { position:fixed; left:8px; bottom:56px; z-index:9; width:min(340px, 70vw);
+    display:flex; flex-direction:column; gap:3px; pointer-events:none; }
+  .lge { background:rgba(18,23,34,.78); border-left:3px solid #4cc9f0; border-radius:6px;
+    padding:4px 8px; font-size:11px; color:#c7d3e8; animation:lin .25s ease; }
+  .lge b { color:#6ee7a0; font-weight:600; }
+  @keyframes lin { from { opacity:0; transform:translateX(-8px);} to {opacity:1;} }
+  /* ---------- hint ---------- */
+  #hint { position:fixed; left:50%; bottom:88px; transform:translateX(-50%); z-index:9;
+    background:rgba(252,163,17,.12); border:1px solid #fca311; color:#ffd9a0; border-radius:12px;
+    padding:8px 14px; font-size:12.5px; max-width:min(520px, 92vw); text-align:center; pointer-events:none; }
+  /* ---------- hand ---------- */
+  #handbox { position:fixed; right:10px; bottom:10px; z-index:11; display:flex; align-items:center; gap:8px; }
+  #hand { width:52px; height:52px; border-radius:14px; border:1px dashed #4cc9f0; background:rgba(18,23,34,.85);
+    display:flex; align-items:center; justify-content:center; font-size:22px; cursor:pointer; }
+  #hand.hold { border-style:solid; border-color:#fca311; box-shadow:0 0 12px rgba(252,163,17,.35); }
+  #hname { font-size:11px; color:#7b8aa3; max-width:70px; text-align:right; }
+  /* ---------- mode legend ---------- */
+  #modes { position:fixed; right:8px; top:52px; z-index:9; display:flex; flex-direction:column; gap:4px; align-items:flex-end; }
+  .mchip { font-size:10px; color:#6b7c99; background:rgba(18,23,34,.7); padding:2px 8px; border-radius:8px; border:1px solid #223049; }
+  /* ---------- overlays ---------- */
+  .ov { position:fixed; inset:0; z-index:30; background:rgba(8,10,16,.92); display:flex;
+    flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:22px; overflow:auto; }
+  .ov h1 { font-size:26px; letter-spacing:6px; color:#4cc9f0; margin-bottom:4px; }
+  .ov h2 { font-size:15px; color:#9fb0cc; font-weight:500; margin-bottom:18px; }
+  .ov .rule { max-width:560px; background:#121722; border:1px solid #223049; border-radius:14px; padding:14px 18px;
+    font-size:13px; line-height:1.65; color:#b9c6dd; text-align:left; margin-bottom:12px; }
+  .ov .rule b { color:#6ee7a0; }
+  .ov .big { background:#0f2433; border:1px solid #4cc9f0; color:#4cc9f0; font-size:16px; font-weight:700;
+    border-radius:14px; padding:14px 34px; margin-top:8px; cursor:pointer; }
+  .ov .big.warn { background:#2b1220; border-color:#ef476f; color:#ef476f; }
+  .ov .small { margin-top:12px; font-size:12px; color:#6b7c99; }
+  .legend h3 { color:#fca311; font-size:13px; margin:10px 0 2px; }
+  .legend .rule { max-width:560px; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="top">
+  <div id="tname">CONTEXT<span id="tsub"></span></div>
+  <div id="bRow2">
+    <button class="btn" id="bPlay" title="пуск">▶</button>
+    <button class="btn" id="bSlow" title="сповільнено">🐌</button>
+    <button class="btn" id="bPause" title="пауза">⏸</button>
+    <button class="btn" id="bForces" title="сили">⇶</button>
+    <button class="btn" id="bFields" title="поля">◉</button>
+    <button class="btn" id="bRes" title="ресурси">≈</button>
+    <button class="btn" id="bCaus" title="причинність">➤</button>
+    <button class="btn" id="bRestart" title="заново">↻</button>
+    <button class="btn" id="bHelp" title="правила">?</button>
+  </div>
+</div>
+<div id="obj"></div>
+<div id="modes"></div>
+<div id="log"></div>
+<div id="hint" class="hidden"></div>
+<div id="handbox">
+  <div id="hname"></div>
+  <div id="hand">＋</div>
+</div>
+
+<div id="ovIntro" class="ov hidden">
+  <h1>CONTEXT</h1>
+  <h2 id="oiSub"></h2>
+  <div class="rule" id="oiRule"></div>
+  <div class="big" id="oiGo">▶ ГРАТИ</div>
+  <div class="small">Ти не керуєш героєм. Ти збираєш процес із частин світу.<br>Тап по елементу — взяти · тап по слоту — вставити/вийняти · тап по полю з елементом у руці — кинути · довгий тап по слоту — вдарити/підірвати</div>
+</div>
+
+<div id="ovWin" class="ov hidden">
+  <h1>ВИХІД</h1>
+  <h2 id="owSub"></h2>
+  <div class="big" id="owNext">НАСТУПНИЙ РІВЕНЬ →</div>
+  <div class="small">«Не знайди правильний предмет. Створи правильний процес.»</div>
+</div>
+
+<div id="ovLose" class="ov hidden">
+  <h1>РОЗПАД</h1>
+  <h2 id="olCause"></h2>
+  <div class="big warn" id="olRetry">↻ СПРОБУЙ ЩЕ</div>
+</div>
+
+<div id="ovHelp" class="ov hidden legend">
+  <h1 style="margin-bottom:6px">ПРАВИЛА</h1>
+  <div class="rule"><b>КОЖНА ВАЖЛИВА ПОДІЯ МАЄ ВИДИМУ ПРИЧИНУ.</b><br>
+    Увімкни шар ➤ ПРИЧИННІСТЬ — і побачиш ланцюги: удар → пляма → вода → камінь → поле → ріст.<br>
+    ⏸ Пауза зупиняє світ. 🐌 Сповільнює. У паузі кидок миттєвий.</div>
+  <h3>🪨 Камінь</h3><div class="rule">1) Створює <b>поле росту</b> навколо себе.<br>2) Поглинає воду (0–10).<br>3) Перевантажений (&gt;7): поле ширше, але ріст слабший.</div>
+  <h3>🥢 Палка</h3><div class="rule">1) <b>Росте</b> у полі каменя, якщо є вода.<br>2) Довга палка, кинута на прірву, стає <b>мостом</b>.<br>3) Кинута — летить і може вдарити пляму.</div>
+  <h3>🟣 Пляма</h3><div class="rule">1) Від <b>удару</b> деформується і пускає <b>воду</b>.<br>2) Вода = ресурс росту і «слизькість» (легше їхати).<br>3) У слоті — періодично віддає вологу.</div>
+  <h3>🔶 Ударник</h3><div class="rule">1) Б’є і <b>штовхає структуру</b> віддачею (куди дивиться).<br>2) У слоті — б’є плями поруч.<br>3) Довгий тап по слоту — вдарити зараз (короткий — вийняти).</div>
+  <h3>🔴 Розрив</h3><div class="rule">1) Накопичує напругу → <b>вибух</b>.<br>2) У слоті вибух штовхає структуру <b>вперед</b> — двигун.<br>3) Але пошкоджує слоти. Довгий тап — підірвати зараз.<br>4) У руці не вибухає.</div>
+  <div class="big" id="ohClose">ЗРОЗУМІЛО</div>
+</div>
+
+<script>
+'use strict';
+/* ============================================================
+   CONTEXT — системний physics-puzzle / emergent sandbox
+   Вертикальний зріз концепту: структура, слоти, канали,
+   поля, ресурси, причинність. Один файл, без залежностей.
+   ============================================================ */
+
+// ---------------- CONFIG ----------------
+const CFG = {
+  G: 900,               // гравітація px/s²
+  FRICTION: 3.0,        // затухання швидкості на землі /s (короткі контрольовані хопи)
+  WET_FRICTION: 1.2,    // затухання у воді (слизько — далі котить)
+  ROLL: 0.55,           // коеф скатування по схилу
+  WET_ROLL: 0.20,       // скатування у воді (вода «гасить» відкат)
+  THRUST: 230,          // імпульс віддачі ударника
+  STRIKER_CD: 1.3,
+  STRIKER_RANGE: 130,   // дальність удару по плямі
+  SLOT_STEP: 46,
+  CELL: 36,
+  PICK_RADIUS: 115,
+  STICK_UNIT: 24,       // px на одиницю довжини палки
+  STICK_MAX: 14,
+  GROW_STRONG: 2.4,     // одиниць/с у сильному полі
+  GROW_WEAK: 0.9,
+  STONE_FIELD_BASE: 170,
+  STONE_FIELD_OVER: 185,
+  STONE_ABSORB: 1.0,
+  WET_DUR: 12,
+  WET_RADIUS: 110,
+  BLOB_EMIT_CD: 4,
+  RUPTURE_RATE: 20,      // напруга/с (швидкий заряд — частий вибух)
+  RUPTURE_RADIUS: 160,
+  RUPTURE_IMPULSE: 600,
+  RUPTURE_UP: 220,
+  RUPTURE_SELF_DMG: 45,
+  RUPTURE_ADJ_DMG: 20,
+  SLOT_HP: 100,
+  PIT_DEATH_Y: 900,
+  STONE_MASS: 0.4,      // додаткова «вага» каменя в слоті
+};
+
+const ELEM = {
+  stone:   { name:'Камінь',  c:'#b8c4d0', r:22, ic:'🪨' },
+  stick:   { name:'Палка',   c:'#c98f4f', r:10, ic:'🥢' },
+  blob:    { name:'Пляма',   c:'#b388ff', r:24, ic:'🟣' },
+  striker: { name:'Ударник', c:'#fca311', r:16, ic:'🔶' },
+  rupture: { name:'Розрив',  c:'#ef476f', r:20, ic:'🔴' },
+};
+
+// ---------------- LEVELS ----------------
+const LEVELS = [
+{
+  name:'Перший рух', sub:'зрозумій віддачу і ріст',
+  nSlots:3, prefill:['striker',null,null],
+  startX:150, exitX:1450, worldW:1560, groundY0:560,
+  ground:[ {x0:0,x1:1000,y:560}, {x0:1260,x1:1560,y:560}, {x0:1000,x1:1260,pit:true} ],
+  elems:[ {type:'stone',x:620}, {type:'stone',x:780}, {type:'stick',x:700,len:2}, {type:'blob',x:770,moist:5} ],
+  hints:[
+    {c:s=>s.x>250,  t:'Структура їде сама: Ударник б’є і віддача штовхає її вправо. Стеж за нею.'},
+    {c:s=>s.x>600,  t:'Поряд: Камінь (поле росту), Палка, Пляма. Візьми палку — тапни по ній.'},
+    {c:s=>s.x>620 && s.stickIn, t:'Встав палку в порожній слот. Ріст потребує поле каменя + воду.'},
+    {c:s=>s.wets>0, t:'Ударник вдарив пляму → вода. Тепер палка росте (поле ✓, вода ✓).' },
+    {c:s=>s.longStick, t:'Палка виросла. Вийми її (тап по слоту) і кинь через прірву — стане мостом.'},
+    {c:s=>s.fell, t:'Прірва. Потрібен міст із довгої палки.'},
+  ],
+},
+{
+  name:'Живий міст', sub:'вирости і кинь міст через прірву',
+  nSlots:5, prefill:['striker',null,null,null,null],
+  startX:150, exitX:1400, worldW:1560, groundY0:560,
+  ground:[ {x0:0,x1:720,y:560}, {x0:1020,x1:1560,y:560}, {x0:720,x1:1020,pit:true} ],
+  elems:[ {type:'stone',x:430}, {type:'stick',x:500,len:2}, {type:'blob',x:560,moist:7} ],
+  hints:[
+    {c:s=>s.x>450, t:'Прірва 300px. Вирости палку до ~14. Не дай структурі впасти — ⏸ на паузу.'},
+    {c:s=>s.wets>0,t:'Вода є. Палка росте — сповільни час 🐌 і дивись на причини ➤.'},
+    {c:s=>s.longStick, t:'Кинь довгу палку в прірву: тап по слоту (у руку) → тап по прірві.'},
+  ],
+},
+{
+  name:'Нестабільний двигун', sub:'жертвуй слоти, щоб піднятись',
+  nSlots:7, prefill:['striker',null,null,null,null,null,null],
+  startX:150, exitX:1380, worldW:1560, groundY0:560,
+  ground:[ {x0:0,x1:520,y:560}, {x0:520,x1:820,y:560,y1:400}, {x0:820,x1:1560,y:400} ],
+  elems:[ {type:'rupture',x:380}, {type:'stick',x:660,len:2}, {type:'blob',x:750,moist:5}, {type:'stone',x:690} ],
+  hints:[
+    {c:s=>s.x>300, t:'Підйом крутий — Ударник не витягне. Розрив = двигун, але він руйнує слоти.'},
+    {c:s=>s.handR, t:'Візьми Розрив (він поряд). Встав у слот — вибух штовхатиме вгору.'},
+    {c:s=>s.x>550, t:'Довгий тап по Розриву в слоті — підірвати зараз. Вода від плями на схилі полегшить підйом.'},
+  ],
+},
+];
+
+// ---------------- GAME STATE ----------------
+let S = null;
+let camX = 0, SCALE = 1;
+let toastT = 0;
+
+function mkElem(type, o) {
+  o = o || {};
+  return { type:type, x:o.x||0, y:o.y||0, vx:0, vy:0, air:false,
+    len: o.len!=null? o.len : 2, sat:0, moist: o.moist!=null? o.moist : 5,
+    tens:0, cd:0, lastFire:9, hitCd:0, bridge:false };
+}
+
+function groundY(x) {
+  for (const p of S.platforms) if (x >= p.x0 && x <= p.x1) return p.y;
+  for (const g of S.ground) {
+    if (g.pit) { if (x > g.x0 && x < g.x1) return null; continue; }
+    if (x >= g.x0 && x <= g.x1) {
+      const y1 = (g.y1!=null)? g.y1 : g.y;
+      const t = (x - g.x0) / (g.x1 - g.x0);
+      return g.y + (y1 - g.y) * t;
+    }
+  }
+  return null;
+}
+function slopeAt(x) {
+  const a = groundY(x-8), b = groundY(x+8);
+  if (a==null || b==null) return 0;
+  return (b - a) / 16;
+}
+
+function makeLevel(li) {
+  const L = LEVELS[li];
+  S = {
+    lvl:li, mode:'play', won:false, over:'intro', hand:null,
+    elems:[], slots:[], struct:{x:L.startX, y:0, vx:0, vy:0, air:false, mass:1},
+    wets:[], parts:[], shocks:[], links:[], impulses:[], events:[],
+    platforms:[], toast:null, toastT:0,
+    layers:{forces:false, fields:false, res:false, caus:false},
+    flags:{}, hintIdx:0, t:0,
+  };
+  S.ground = L.ground;
+  // слоти
+  const n = L.nSlots;
+  for (let i=0;i<n;i++) {
+    const pf = L.prefill[i];
+    S.slots.push({ lx:(i-(n-1)/2)*CFG.SLOT_STEP, el: pf? mkElem(pf, {x:S.struct.x, y:0}) : null, hp:CFG.SLOT_HP, dead:false });
+    if (pf==='striker') S.slots[i].el.lastFire = 0.2; // скоро перший удар
+  }
+  // елементи світу
+  for (const e of L.elems) {
+    const el = mkElem(e.type, e);
+    el.x = e.x;
+    const gy = groundY(e.x);
+    el.y = gy!=null ? gy - ELEM[e.type].r - 2 : 300;
+    S.elems.push(el);
+  }
+  S.struct.y = groundY(S.struct.x) - CFG.CELL/2 - 12;
+  S.exitY = groundY(L.exitX);
+  S.platforms = [];
+  event('СИСТЕМА ЗАПУЩЕНА: світ живе без тебе');
+  updateHUD();
+  updateModes();
+  showIntro();
+  return S;
+}
+
+// ---------------- EVENTS / TOASTS ----------------
+function event(text) {
+  S.events.unshift({ text:text, t:8 });
+  if (S.events.length > 6) S.events.pop();
+  if (window.__q) __q.push(['ev', text]);
+}
+function toast(text, ms) {
+  S.toast = text; S.toastT = ms || 5000;
+  const el = document.getElementById('hint');
+  el.textContent = text; el.classList.remove('hidden');
+  clearTimeout(toastT);
+}
+function link(x1,y1,x2,y2,label) {
+  S.links.push({ x1:x1, y1:y1, x2:x2, y2:y2, label:label, t:2.6 });
+  if (S.links.length > 8) S.links.shift();
+}
+function impulse(x, vx, label) {
+  S.impulses.push({ x:x, vx:vx, t:0.7, label:label||'' });
+  if (S.impulses.length > 6) S.impulses.shift();
+}
+function shock(x,y,r) { S.shocks.push({ x:x, y:y, r:0, max:r, t:0.5 }); }
+function burst(x,y,n,spread) {
+  for (let i=0;i<n;i++) S.parts.push({ x:x, y:y, vx:(Math.random()-0.5)*spread, vy:-Math.random()*(60+60*Math.random()), t:1.1, c:'#4cc9f0', r:2.5 });
+}
+function spark(x,y,n) {
+  for (let i=0;i<n;i++) S.parts.push({ x:x+(Math.random()-0.5)*30, y:y+(Math.random()-0.5)*20, vx:(Math.random()-0.5)*40, vy:-Math.random()*50, t:0.7, c:'#6ee7a0', r:2 });
+}
+
+// ---------------- HINTS ----------------
+function checkHints() {
+  const L = LEVELS[S.lvl];
+  if (S.hintIdx >= L.hints.length) return;
+  const st = snapshotCond();
+  const h = L.hints[S.hintIdx];
+  if (h.c(st)) { S.hintIdx++; toast(h.t, 6500); }
+}
+function snapshotCond() {
+  const st = S.struct;
+  return {
+    x: st.x,
+    wets: S.wets.length,
+    stickIn: S.slots.some(s=>s.el && s.el.type==='stick'),
+    longStick: S.slots.some(s=>s.el && s.el.type==='stick' && s.el.len >= 10),
+    handR: S.hand && S.hand.type==='rupture',
+    fell: S.flags.fell || false,
+  };
+}
+
+// ---------------- ACTIONS ----------------
+function takeElem(el) {
+  if (S.hand) return;
+  S.hand = el;
+  const wi = S.elems.indexOf(el);
+  if (wi >= 0) { S.elems.splice(wi,1); }
+  else {
+    for (const s of S.slots) if (s.el === el) s.el = null;
+    if (el.bridge) { S.platforms = S.platforms.filter(p => !(p.stickEl===el)); el.bridge=false; }
+  }
+  updateHand();
+  event('ВЗЯТО: ' + ELEM[el.type].name);
+}
+function insertSlot(i) {
+  if (!S.hand) return;
+  const s = S.slots[i];
+  if (s.dead || s.el) return;
+  s.el = S.hand; S.hand = null;
+  s.el.x = S.struct.x + s.lx; s.el.y = S.struct.y;
+  if (s.el.type==='striker') s.el.lastFire = 99; // почне з повного кулдауну? ні: дозволимо швидкий перший удар
+  if (s.el.type==='striker') s.el.cd = 0.3;
+  event('ВСТАВЛЕНО: ' + ELEM[s.el.type].name + ' → слот ' + (i+1));
+  updateHand();
+}
+function removeSlot(i) {
+  const s = S.slots[i];
+  if (s.dead || !s.el || S.hand) return;
+  S.hand = s.el; s.el = null;
+  updateHand();
+  event('ВИЙНЯТО: слот ' + (i+1));
+}
+function throwElem(el, tx, ty) {
+  if (S.mode === 'pause') {
+    // миттєвий кидок у паузі
+    el.x = tx;
+    const gy = groundY(tx);
+    el.y = gy!=null ? gy - ELEM[el.type].r - 2 : ty;
+    el.air = false; el.vx = 0; el.vy = 0;
+    S.elems.push(el);
+    if (el.type==='stick') bridgeCheck(el);
+    // миттєвий кидок може вдарити пляму поруч із ціллю
+    for (const b of S.elems) {
+      if (b.type==='blob' && b!==el && Math.abs(b.x - el.x) < 34 && Math.abs(b.y - el.y) < 44) hitBlob(b, el.x, el.y);
+    }
+    event('ВИКИД: ' + ELEM[el.type].name);
+  } else {
+    el.air = true;
+    const dx = tx - el.x, dy = ty - el.y;
+    let sp = Math.sqrt(dx*dx + dy*dy);
+    if (sp < 20) sp = 20;
+    const v = Math.min(760, sp * 3.2);
+    el.vx = dx/sp * v;
+    el.vy = dy/sp * v - 140; // дуга
+    S.elems.push(el);
+    event('ВИКИД: ' + ELEM[el.type].name);
+  }
+  S.hand = null;
+  updateHand();
+}
+function tapWorld(wx, wy) {
+  if (S.over && S.over !== 'play') return;
+  if (S.hand) { throwElem(S.hand, wx, wy); return; }
+  // спроба підібрати найближчий елемент біля структури
+  const st = S.struct;
+  let best = null, bd = 1e9;
+  for (const e of S.elems) {
+    if (e.air) continue;
+    const d = Math.abs(e.x - st.x);
+    if (d < CFG.PICK_RADIUS && d < bd) { bd = d; best = e; }
+  }
+  if (best) takeElem(best);
+}
+function tapSlot(i) {
+  if (S.over && S.over !== 'play') return;
+  const s = S.slots[i];
+  if (s.el) { if (s.el.type==='striker' && S.mode!=='pause') fireStriker(i); else removeSlot(i); }
+  else insertSlot(i);
+}
+function tapHand() {
+  if (!S.hand) return;
+  const st = S.struct;
+  throwElem(S.hand, st.x + 30, groundY(st.x+30)!=null ? groundY(st.x+30) : 400);
+}
+function fireStriker(i) {
+  const s = S.slots[i];
+  if (!s.el || s.el.type!=='striker' || s.dead) return;
+  if (s.el.cd > 0.05) { toast('Ударник заряджається…', 1500); return; }
+  const facing = s.lx < 0 ? -1 : 1;
+  const st = S.struct;
+  const imp = CFG.THRUST / st.mass;
+  st.vx -= facing * imp;
+  s.el.cd = CFG.STRIKER_CD;
+  s.el.lastFire = 0;
+  impulse(st.x, -facing*imp, 'Віддача');
+  shock(st.x + facing*30, st.y - 10, 34);
+  // б'є плями
+  for (const e of S.elems) {
+    if (e.type==='blob' && Math.abs((st.x + facing*30) - e.x) < CFG.STRIKER_RANGE) {
+      hitBlob(e, st.x, st.y);
+      link(st.x, st.y, e.x, e.y, 'УДАР');
+    }
+  }
+  event('ВІДДАЧА: ударник штовхає структуру');
+}
+function detonateRupture(i) {
+  const s = S.slots[i];
+  if (!s.el || s.el.type!=='rupture' || s.dead) return;
+  if (s.el.tens < 35) { toast('Напруга ще мала (' + Math.round(s.el.tens) + ')', 1500); return; }
+  explodeRupture(s.el, true, i);
+}
+function explodeRupture(el, inSlot, slotIdx) {
+  el.tens = 0; el.cd = 1.2;
+  const st = S.struct;
+  const ex = inSlot ? st.x + S.slots[slotIdx].lx : el.x;
+  const ey = inSlot ? st.y : el.y;
+  shock(ex, ey, 120);
+  burst(ex, ey, 22, 300);
+  event('ВИБУХ: Розрив розкидав силу');
+  if (inSlot) {
+    // ракета: вибух штовхає структуру вперед і вгору
+    st.vx += CFG.RUPTURE_IMPULSE / st.mass;
+    st.vy -= CFG.RUPTURE_UP;
+    impulse(st.x, CFG.RUPTURE_IMPULSE / st.mass, 'Вибух');
+    dmgSlot(slotIdx, CFG.RUPTURE_SELF_DMG, 'Розрив зруйнував слот');
+    for (let j=0;j<S.slots.length;j++) if (j!==slotIdx && Math.abs(j-slotIdx)<=1) dmgSlot(j, CFG.RUPTURE_ADJ_DMG, 'Розрив пошкодив сусідній слот');
+  } else {
+    // світовий розрив: радіальний імпульс
+    const d = Math.abs(st.x - ex);
+    if (d < CFG.RUPTURE_RADIUS + 40) {
+      const f = 1 - d / (CFG.RUPTURE_RADIUS + 40);
+      const dir = st.x >= ex ? 1 : -1;
+      st.vx += CFG.RUPTURE_IMPULSE * f * dir / st.mass;
+      st.vy -= CFG.RUPTURE_UP * f;
+      impulse(ex, CFG.RUPTURE_IMPULSE * f * dir, 'Вибух');
+    }
+  }
+  // плями
+  for (const e of S.elems) {
+    if (e.type==='blob' && Math.abs(e.x - ex) < CFG.RUPTURE_RADIUS) {
+      hitBlob(e, ex, ey);
+      link(ex, ey, e.x, e.y, 'ВИБУХ→ПЛЯМА');
+    }
+  }
+  if (!inSlot && Math.abs(S.struct.x - el.x) < 70) {
+    // вибух світового розриву поряд — теж б'є
+  }
+}
+function dmgSlot(i, d, why) {
+  const s = S.slots[i];
+  if (s.dead) return;
+  s.hp -= d;
+  if (s.hp <= 0) {
+    s.dead = true; s.hp = 0;
+    if (s.el) { event('ЗРУЙНОВАНО: елемент ' + ELEM[s.el.type].name + ' розсіявся (слот ' + (i+1) + ')'); s.el = null; }
+    else event('ЗРУЙНОВАНО: слот ' + (i+1));
+    spark(S.struct.x + s.lx, S.struct.y, 12);
+    if (S.slots.every(x=>x.dead)) lose('Структура втратила всі слоти і розсіялась у світ');
+  }
+}
+function hitBlob(e, hx, hy) {
+  if (e.moist <= 0) return;
+  e.moist--;
+  const gy = groundY(e.x);
+  S.wets.push({ x0:e.x - CFG.WET_RADIUS, x1:e.x + CFG.WET_RADIUS, t:CFG.WET_DUR });
+  burst(e.x, e.y, 16, 160);
+  event('ДЕФОРМАЦІЯ: пляма → вода');
+  link(hx, hy, e.x, e.y, 'УДАР');
+  if (e.moist <= 0) event('Пляма висохла');
+}
+function addWetAt(x, w) {
+  S.wets.push({ x0: x - w/2, x1: x + w/2, t: CFG.WET_DUR });
+}
+
+// ---------------- SIM ----------------
+function step(dt) {
+  if (S.over !== 'play') return;
+  const mul = S.mode==='slow' ? 0.3 : 1;
+  dt *= mul;
+  if (dt <= 0) return;
+  S.t += dt;
+  const st = S.struct;
+
+  // вага структури
+  st.mass = 1;
+  for (const s of S.slots) if (!s.dead && s.el) {
+    if (s.el.type==='stone') st.mass += CFG.STONE_MASS;
+    if (s.el.type==='rupture') st.mass += 0.2;
+  }
+
+  // ---- фізика елементів світу ----
+  for (let i=S.elems.length-1;i>=0;i--) {
+    const e = S.elems[i];
+    if (e.air) {
+      e.vy += CFG.G * dt;
+      e.x += e.vx * dt; e.y += e.vy * dt;
+      const gy = groundY(e.x);
+      if (gy != null && e.y >= gy - 4) { landElem(e); }
+      else if (e.y > CFG.PIT_DEATH_Y) {
+        if (e.type==='stick') event('Палку втрачено в прірві');
+        S.elems.splice(i,1);
+      }
+      // удар по плямі під час польоту
+      if (e.vx !== 0) for (const b of S.elems) {
+        if (b.type==='blob' && b!==e && Math.abs(b.x-e.x)<26 && Math.abs(b.y-e.y)<40) { hitBlob(b, e.x, e.y); e.vx *= 0.4; }
+      }
+    }
+  }
+  // світові розриви: зарядка
+  for (const e of S.elems) {
+    if (e.type==='rupture') {
+      if (e.cd > 0) e.cd -= dt;
+      else { e.tens += CFG.RUPTURE_RATE * dt; if (e.tens >= 100) explodeRupture(e, false, -1); }
+    }
+  }
+
+  // ---- структура ----
+  const gy = groundY(st.x);
+  if (gy === null) {
+    if (!st.air) { st.air = true; st.vy = 0; event('СТРУКТУРА ПАДАЄ: під нею прірва'); }
+    st.vy += CFG.G * dt;
+    st.y += st.vy * dt;
+    st.x += st.vx * dt;
+    if (st.y > CFG.PIT_DEATH_Y) lose('Структура впала в прірву' + (S.flags.fell?'':' — потрібен міст або швидкість'));
+  } else if (st.air) {
+    st.vy += CFG.G * dt;
+    st.y += st.vy * dt;
+    st.x += st.vx * dt;
+    if (st.y >= gy - CFG.CELL/2 - 12) { st.y = gy - CFG.CELL/2 - 12; st.air = false; st.vy = 0; }
+  } else {
+    st.y = gy - CFG.CELL/2 - 12;
+    // схил
+    const wet = isWet(st.x);
+    const sl = slopeAt(st.x);
+    const roll = CFG.G * Math.sin(Math.atan(sl)) * (wet ? CFG.WET_ROLL : CFG.ROLL);
+    st.vx += roll * dt;
+    st.vx *= Math.max(0, 1 - (wet ? CFG.WET_FRICTION : CFG.FRICTION) * dt);
+    if (Math.abs(st.vx) < 1.5) st.vx = 0;
+    st.x += st.vx * dt;
+  }
+  if (st.x < 40) { st.x = 40; st.vx = Math.max(0, st.vx); }
+  if (st.x > 1560) st.x = 1560;
+
+  // ---- слоти: поведінка елементів ----
+  for (let i=0;i<S.slots.length;i++) {
+    const s = S.slots[i];
+    if (s.dead || !s.el) continue;
+    const e = s.el;
+    if (e.type==='striker') {
+      e.cd -= dt;
+      if (e.cd <= 0) fireStriker(i);
+    } else if (e.type==='blob') {
+      e.cd -= dt;
+      if (e.cd <= 0 && e.moist > 0) {
+        e.cd = CFG.BLOB_EMIT_CD;
+        e.moist--;
+        addWetAt(st.x, 90);
+        event('ВОЛОГА: пляма в слоті віддає воду');
+      }
+    } else if (e.type==='rupture') {
+      if (e.cd > 0) e.cd -= dt;
+      else { e.tens += CFG.RUPTURE_RATE * dt; if (e.tens >= 100) explodeRupture(e, true, i); }
+    } else if (e.type==='stone') {
+      absorbWetNear(st.x, e, dt);
+    } else if (e.type==='stick') {
+      growStick(e, st.x, dt);
+    }
+  }
+  // камінь у світі: поглинає воду
+  for (const e of S.elems) if (e.type==='stone') absorbWetNear(e.x, e, dt);
+
+  // ---- вологі зони ----
+  for (let i=S.wets.length-1;i>=0;i--) {
+    const w = S.wets[i];
+    w.t -= dt;
+    if (w.t <= 0) S.wets.splice(i,1);
+  }
+
+  // ---- зіткнення структури з плямою (на швидкості) ----
+  if (!st.air && Math.abs(st.vx) > 150) {
+    for (const e of S.elems) {
+      if (e.type==='blob' && e.hitCd <= 0 && Math.abs(e.x - st.x) < 55) { hitBlob(e, st.x, st.y); e.hitCd = 1; }
+    }
+  }
+  for (const e of S.elems) if (e.hitCd > 0) e.hitCd -= dt;
+
+  // ---- частинки / хвилі / імпульси / зв'язки ----
+  for (let i=S.parts.length-1;i>=0;i--) {
+    const p = S.parts[i];
+    p.vy += CFG.G*0.6*dt; p.x += p.vx*dt; p.y += p.vy*dt; p.t -= dt;
+    const pgy = groundY(p.x);
+    if (pgy != null && p.y > pgy - 2) { p.y = pgy - 2; p.vy *= -0.3; p.vx *= 0.7; }
+    if (p.t <= 0) S.parts.splice(i,1);
+  }
+  for (let i=S.shocks.length-1;i>=0;i--) { const sh=S.shocks[i]; sh.r += (sh.max-sh.r)*dt*6; sh.t-=dt; if (sh.t<=0) S.shocks.splice(i,1); }
+  for (let i=S.impulses.length-1;i>=0;i--) { S.impulses[i].t -= dt; if (S.impulses[i].t<=0) S.impulses.splice(i,1); }
+  for (let i=S.links.length-1;i>=0;i--) { S.links[i].t -= dt; if (S.links[i].t<=0) S.links.splice(i,1); }
+  for (let i=S.events.length-1;i>=0;i--) { S.events[i].t -= dt; if (S.events[i].t<=0) S.events.splice(i,1); }
+
+  // ---- перемога ----
+  if (!st.air && st.x >= LEVELS[S.lvl].exitX) win();
+  checkHints();
+}
+function landElem(e) {
+  e.air = false; e.vx = 0; e.vy = 0;
+  const gy = groundY(e.x);
+  if (e.type==='stick') {
+    if (gy == null) { bridgeCheck(e); }
+    else e.y = gy - 4;
+  } else e.y = gy!=null ? gy - ELEM[e.type].r - 2 : e.y;
+}
+function bridgeCheck(e) {
+  // чи летить над прірвою?
+  for (const g of S.ground) {
+    if (g.pit && e.x > g.x0 && e.x < g.x1) {
+      const pitW = g.x1 - g.x0;
+      const lenPx = e.len * CFG.STICK_UNIT;
+      if (lenPx >= pitW * 0.9) {
+        const edgeL = groundY(g.x0 - 4), edgeR = groundY(g.x1 + 4);
+        const ly = Math.min(edgeL!=null?edgeL:1e9, edgeR!=null?edgeR:1e9);
+        const cx = Math.max(g.x0 + lenPx/2 - 20, Math.min(g.x1 - lenPx/2 + 20, e.x));
+        const p = { x0: cx - lenPx/2, x1: cx + lenPx/2, y: ly, stickEl: e };
+        S.platforms.push(p);
+        e.bridge = true;
+        e.y = ly - 4;
+        event('ВИКИД: палка стала мостом через прірву');
+        shock(cx, ly - 30, 60);
+        return;
+      }
+    }
+  }
+  // не над прірвою/коротка — падає далі (або лягає)
+  if (groundY(e.x) != null) { e.y = groundY(e.x) - 4; }
+}
+function isWet(x) {
+  for (const w of S.wets) if (x > w.x0 - 25 && x < w.x1 + 25) return true;
+  return false;
+}
+function absorbWetNear(x, stone, dt) {
+  for (const w of S.wets) {
+    if (x > w.x0 && x < w.x1) {
+      const before = stone.sat;
+      stone.sat = Math.min(10, stone.sat + CFG.STONE_ABSORB * dt);
+      w.t -= dt * 0.5;
+      if (before <= 7 && stone.sat > 7) event('ПЕРЕВАНТАЖЕННЯ: камінь увібрав забагато води — поле ширше, але слабше');
+      if (stone.sat >= 10) { stone.sat = 10; }
+    }
+  }
+}
+function growStick(e, sx, dt) {
+  // поле: камінь у світі поруч або камінь у слоті
+  let field = false, overloaded = false;
+  for (const se of S.elems) {
+    if (se.type==='stone') {
+      const r = se.sat > 7 ? CFG.STONE_FIELD_OVER : CFG.STONE_FIELD_BASE + se.sat * 5;
+      if (Math.abs(se.x - sx) < r) { field = true; overloaded = se.sat > 7; }
+    }
+  }
+  for (const s of S.slots) {
+    if (s.el && s.el.type==='stone') { field = true; overloaded = s.el.sat > 7; }
+  }
+  if (!field) return;
+  if (!isWet(sx)) return;
+  const before = Math.floor(e.len);
+  e.len = Math.min(CFG.STICK_MAX, e.len + (overloaded ? CFG.GROW_WEAK : CFG.GROW_STRONG) * dt);
+  const after = Math.floor(e.len);
+  if (after > before) { spark(sx, S.struct.y - 30, 4); if (after % 2 === 0) event('РІСТ: палка +' + after + ' (поле ✓, вода ✓)'); }
+}
+
+// ---------------- WIN / LOSE ----------------
+function win() {
+  if (S.won) return;
+  S.won = true; S.over = 'win';
+  event('ВИХІД ДОСЯГНУТО');
+  const L = LEVELS[S.lvl];
+  document.getElementById('owSub').textContent = 'Рівень ' + (S.lvl+1) + ': «' + L.name + '» пройдено';
+  const next = document.getElementById('owNext');
+  if (S.lvl < LEVELS.length - 1) next.textContent = 'НАСТУПНИЙ РІВЕНЬ →';
+  else next.textContent = '↻ ГРАТИ ЗНОВУ';
+  document.getElementById('ovWin').classList.remove('hidden');
+}
+function lose(cause) {
+  if (S.over !== 'play') return;
+  S.over = 'lose';
+  S.flags.fell = S.flags.fell || /прірв/i.test(cause);
+  event('РОЗПАД: ' + cause);
+  document.getElementById('olCause').textContent = cause;
+  document.getElementById('ovLose').classList.remove('hidden');
+}
+function restartLevel() {
+  makeLevel(S.lvl);
+  document.getElementById('ovWin').classList.add('hidden');
+  document.getElementById('ovLose').classList.add('hidden');
+}
+function showIntro() {
+  const L = LEVELS[S.lvl];
+  S.over = 'intro';
+  document.getElementById('tsub').textContent = ' · ' + (S.lvl+1) + '/' + LEVELS.length + ' ' + L.name;
+  document.getElementById('oiSub').textContent = 'РІВЕНЬ ' + (S.lvl+1) + ' — «' + L.name.toUpperCase() + '»';
+  document.getElementById('oiRule').innerHTML =
+    '<b>Завдання:</b> доведи структуру до виходу → (' + Math.round(L.exitX) + ').<br>' +
+    'Елементи рівня: ' + L.elems.map(e=>ELEM[e.type].name).join(', ') + '.<br>' +
+    '<b>Цикл:</b> спостерігай → зрозумій взаємодії → візьми властивості зі світу → збери структуру → запусти процес → побач наслідки.';
+  document.getElementById('ovIntro').classList.remove('hidden');
+}
+function dismissIntro() {
+  S.over = 'play';
+  document.getElementById('ovIntro').classList.add('hidden');
+  const L = LEVELS[S.lvl];
+  document.getElementById('obj').textContent = 'МЕТА: довести структуру до виходу →  ' + L.name + (S.lvl<LEVELS.length-1 ? ' · рівень '+(S.lvl+1) : ' · фінал');
+}
+
+// ---------------- UI ----------------
+function updateHand() {
+  const h = document.getElementById('hand');
+  const hn = document.getElementById('hname');
+  if (S.hand) {
+    h.textContent = ELEM[S.hand.type].ic;
+    h.classList.add('hold');
+    hn.textContent = ELEM[S.hand.type].name;
+  } else {
+    h.textContent = '＋';
+    h.classList.remove('hold');
+    hn.textContent = 'рука';
+  }
+}
+function updateModes() {
+  const pm = document.getElementById('bPause'), pl = document.getElementById('bPlay'), sl = document.getElementById('bSlow');
+  pl.classList.toggle('on', S.mode==='play');
+  pm.classList.toggle('pause', S.mode==='pause');
+  sl.classList.toggle('on', S.mode==='slow');
+}
+function setMode(m) {
+  S.mode = m;
+  if (m === 'pause') { S.struct.vx = 0; S.struct.vy = 0; } // контекстна пауза: світ і інерція завмирають
+  updateModes();
+}
+function updateHUD() {
+  const layers = S.layers;
+  document.getElementById('bForces').classList.toggle('on', layers.forces);
+  document.getElementById('bFields').classList.toggle('on', layers.fields);
+  document.getElementById('bRes').classList.toggle('on', layers.res);
+  document.getElementById('bCaus').classList.toggle('on', layers.caus);
+  updateModes();
+}
+let logTimer = 0;
+function renderLog() {
+  logTimer -= 16;
+  if (logTimer > 0) return;
+  logTimer = 300;
+  const el = document.getElementById('log');
+  el.innerHTML = '';
+  const n = Math.min(5, S.events.length);
+  for (let i=0;i<n;i++) {
+    const e = S.events[i];
+    const d = document.createElement('div');
+    d.className = 'lge';
+    d.textContent = e.text;
+    el.appendChild(d);
+  }
+}
+
+// ---------------- RENDER ----------------
+function draw() {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const vw = window.innerWidth, vh = window.innerHeight;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (cv.width !== Math.round(vw*dpr) || cv.height !== Math.round(vh*dpr)) { cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); }
+  SCALE = Math.max(0.5, Math.min(1.35, Math.min(vw/480, vh/680)));
+  const st = S.struct;
+  camX = Math.max(0, Math.min(LEVELS[S.lvl].worldW - vw/SCALE, st.x - vw/SCALE/2));
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#0b0e14';
+  ctx.fillRect(0, 0, vw, vh);
+  ctx.setTransform(dpr*SCALE, 0, 0, dpr*SCALE, -camX*dpr*SCALE, 0);
+
+  const L = LEVELS[S.lvl];
+
+  // фонова сітка
+  ctx.strokeStyle = 'rgba(60,80,120,0.08)';
+  ctx.lineWidth = 1;
+  for (let x = Math.floor(camX/80)*80; x < camX + vw/SCALE + 80; x += 80) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,800); ctx.stroke(); }
+  for (let y = 0; y < 800; y += 80) { ctx.beginPath(); ctx.moveTo(camX,y); ctx.lineTo(camX+vw/SCALE,y); ctx.stroke(); }
+
+  // терен
+  for (const g of S.ground) {
+    if (g.pit) {
+      ctx.fillStyle = '#0a0d13';
+      ctx.fillRect(g.x0, 0, g.x1 - g.x0, 800);
+      ctx.strokeStyle = 'rgba(239,71,111,0.35)';
+      ctx.setLineDash([10,10]);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(g.x0, 0, g.x1 - g.x0, 800);
+      ctx.setLineDash([]);
+      // штрихи небезпеки
+      ctx.strokeStyle = 'rgba(239,71,111,0.12)';
+      for (let x = g.x0; x < g.x1; x += 40) { ctx.beginPath(); ctx.moveTo(x, 700); ctx.lineTo(x+40, 760); ctx.stroke(); }
+    } else {
+      const y1 = (g.y1!=null)? g.y1 : g.y;
+      const grad = ctx.createLinearGradient(0, Math.min(g.y,y1), 0, 800);
+      grad.addColorStop(0, '#1a2233');
+      grad.addColorStop(1, '#10141f');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(g.x0, 800);
+      ctx.lineTo(g.x0, g.y);
+      ctx.lineTo(g.x1, y1);
+      ctx.lineTo(g.x1, 800);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#2c3a55';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(g.x0, g.y); ctx.lineTo(g.x1, y1); ctx.stroke();
+    }
+  }
+  // мости
+  for (const p of S.platforms) {
+    ctx.fillStyle = '#8a5a33';
+    ctx.fillRect(p.x0 - 6, p.y - 8, p.x1 - p.x0 + 12, 14);
+    ctx.fillStyle = '#c98f4f';
+    ctx.fillRect(p.x0, p.y - 6, p.x1 - p.x0, 10);
+    ctx.fillStyle = 'rgba(201,143,79,0.35)';
+    ctx.fillRect(p.x0, p.y - 3, p.x1 - p.x0, 3);
+  }
+  // вихід
+  const ex = L.exitX, ey = groundY(ex)!=null ? groundY(ex) : 400;
+  ctx.strokeStyle = '#4cc9f0';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(ex, ey - 44, 26 + Math.sin(S.t*3)*4, 0, 7); ctx.stroke();
+  ctx.fillStyle = 'rgba(76,201,240,0.25)';
+  ctx.beginPath(); ctx.arc(ex, ey - 44, 26, 0, 7); ctx.fill();
+  ctx.fillStyle = '#4cc9f0';
+  ctx.font = 'bold 16px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText('ВИХІД', ex, ey - 78);
+  // старт
+  ctx.fillStyle = 'rgba(110,231,160,0.5)';
+  ctx.font = '13px system-ui';
+  ctx.fillText('СТАРТ', 60, groundY(60)-20);
+
+  // вологі зони (ресурси)
+  const showRes = S.layers.res;
+  for (const w of S.wets) {
+    const a = showRes ? 0.45 : 0.2;
+    ctx.fillStyle = 'rgba(76,201,240,' + a + ')';
+    ctx.beginPath();
+    ctx.ellipse((w.x0+w.x1)/2, groundY((w.x0+w.x1)/2) - 6, (w.x1-w.x0)/2, 9, 0, 0, 7);
+    ctx.fill();
+    if (showRes) { ctx.fillStyle='#4cc9f0'; ctx.font='10px system-ui'; ctx.fillText('ВОДА', (w.x0+w.x1)/2, groundY((w.x0+w.x1)/2)-18); }
+  }
+
+  // поля (шар)
+  if (S.layers.fields) {
+    const stones = S.elems.filter(e=>e.type==='stone').map(e=>({x:e.x, sat:e.sat}));
+    for (const s of S.slots) if (s.el && s.el.type==='stone') stones.push({x: st.x + s.lx, sat:s.el.sat});
+    for (const s of stones) {
+      const r = s.sat > 7 ? CFG.STONE_FIELD_OVER : CFG.STONE_FIELD_BASE + s.sat*5;
+      ctx.strokeStyle = s.sat > 7 ? 'rgba(252,163,17,0.5)' : 'rgba(76,201,240,0.45)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8,8]);
+      ctx.beginPath(); ctx.arc(s.x, st.y - 10, r, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = s.sat > 7 ? '#fca311' : '#4cc9f0';
+      ctx.font = '11px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText('ПОЛЕ РОСТУ', s.x, st.y - 10 - r - 6);
+    }
+    for (const e of S.elems) if (e.type==='rupture') {
+      ctx.strokeStyle = 'rgba(239,71,111,0.4)';
+      ctx.setLineDash([5,8]);
+      ctx.beginPath(); ctx.arc(e.x, e.y, CFG.RUPTURE_RADIUS, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
+  // елементи світу
+  for (const e of S.elems) drawElem(ctx, e, e.x, e.y, 1);
+
+  // структура
+  drawStructure(ctx, st);
+
+  // каузальність (шар)
+  if (S.layers.caus) {
+    for (const lk of S.links) {
+      const a = Math.min(1, lk.t);
+      ctx.strokeStyle = 'rgba(255,196,0,' + (0.8*a) + ')';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([6,6]);
+      ctx.beginPath(); ctx.moveTo(lk.x1, lk.y1); ctx.lineTo(lk.x2, lk.y2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255,196,0,' + (0.9*a) + ')';
+      ctx.font = 'bold 13px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(lk.label, (lk.x1+lk.x2)/2, (lk.y1+lk.y2)/2 - 8);
+    }
+  }
+
+  // сили (шар)
+  if (S.layers.forces) {
+    for (const im of S.impulses) {
+      const a = Math.min(1, im.t*2);
+      const len = Math.max(20, Math.abs(im.vx)*0.25);
+      const dir = Math.sign(im.vx) || 1;
+      ctx.strokeStyle = 'rgba(252,163,17,' + a + ')';
+      ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.moveTo(im.x, st.y); ctx.lineTo(im.x + dir*len, st.y); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(im.x + dir*len, st.y);
+      ctx.lineTo(im.x + dir*(len-12), st.y - 7);
+      ctx.lineTo(im.x + dir*(len-12), st.y + 7);
+      ctx.closePath(); ctx.fillStyle = 'rgba(252,163,17,' + a + ')'; ctx.fill();
+      if (im.label) { ctx.fillStyle = 'rgba(252,163,17,' + a + ')'; ctx.font = '11px system-ui'; ctx.fillText(im.label, im.x + dir*len*0.5, st.y - 14); }
+    }
+  }
+
+  // частинки
+  for (const p of S.parts) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, p.t));
+    ctx.fillStyle = p.c;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  // хвилі
+  for (const sh of S.shocks) {
+    ctx.strokeStyle = 'rgba(255,255,255,' + Math.max(0, sh.t*1.2) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(sh.x, sh.y, sh.r, 0, 7); ctx.stroke();
+  }
+}
+
+function drawStructure(ctx, st) {
+  const n = S.slots.length;
+  // з'єднувачі
+  ctx.strokeStyle = '#33435f';
+  ctx.lineWidth = 9;
+  for (let i=0;i<n-1;i++) {
+    if (S.slots[i].dead && S.slots[i+1].dead) continue;
+    const x1 = st.x + S.slots[i].lx, x2 = st.x + S.slots[i+1].lx;
+    ctx.beginPath(); ctx.moveTo(x1, st.y); ctx.lineTo(x2, st.y); ctx.stroke();
+  }
+  for (let i=0;i<n;i++) {
+    const s = S.slots[i];
+    const x = st.x + s.lx;
+    if (s.dead) {
+      ctx.fillStyle = 'rgba(30,36,50,0.9)';
+      ctx.strokeStyle = '#4a2a35';
+      ctx.lineWidth = 2;
+      rrect(ctx, x - CFG.CELL/2, st.y - CFG.CELL/2, CFG.CELL, CFG.CELL, 8);
+      ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#ef476f';
+      ctx.beginPath(); ctx.moveTo(x-8, st.y-8); ctx.lineTo(x+8, st.y+8); ctx.moveTo(x+8, st.y-8); ctx.lineTo(x-8, st.y+8); ctx.stroke();
+      continue;
+    }
+    ctx.fillStyle = '#141b2a';
+    ctx.strokeStyle = s.el ? ELEM[s.el.type].c : '#2c3a55';
+    ctx.lineWidth = 2;
+    rrect(ctx, x - CFG.CELL/2, st.y - CFG.CELL/2, CFG.CELL, CFG.CELL, 8);
+    ctx.fill(); ctx.stroke();
+    if (s.el) drawElem(ctx, s.el, x, st.y, 0.85);
+    // hp
+    const hpw = 26, hpf = Math.max(0, s.hp/CFG.SLOT_HP);
+    ctx.fillStyle = '#0f1522';
+    ctx.fillRect(x - hpw/2, st.y + CFG.CELL/2 + 3, hpw, 3);
+    ctx.fillStyle = hpf > 0.5 ? '#6ee7a0' : hpf > 0.25 ? '#fca311' : '#ef476f';
+    ctx.fillRect(x - hpw/2, st.y + CFG.CELL/2 + 3, hpw*hpf, 3);
+  }
+}
+
+function drawElem(ctx, e, x, y, s) {
+  const t = ELEM[e.type];
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(s, s);
+  switch (e.type) {
+    case 'stone': {
+      ctx.fillStyle = '#8f9ba8';
+      ctx.beginPath(); ctx.arc(0, 0, t.r, 0, 7); ctx.fill();
+      ctx.fillStyle = '#6d7783';
+      ctx.beginPath(); ctx.arc(-6, -6, 6, 0, 7); ctx.arc(7, 5, 5, 0, 7); ctx.fill();
+      // вода всередині
+      if (e.sat > 0.3) {
+        ctx.fillStyle = 'rgba(76,201,240,0.75)';
+        ctx.beginPath(); ctx.arc(0, 6, t.r * 0.75, 0, Math.PI); ctx.fill();
+      }
+      // перевантаження
+      if (e.sat > 7) {
+        ctx.strokeStyle = 'rgba(252,163,17,0.9)';
+        ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(0, 0, t.r + 5 + Math.sin(S.t*6)*2, 0, 7); ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.font = 'bold 11px system-ui'; ctx.textAlign='center';
+      ctx.fillText(Math.round(e.sat) + '/10', 0, 4);
+      break;
+    }
+    case 'stick': {
+      const len = Math.max(1, e.len) * CFG.STICK_UNIT / 2;
+      const growing = e.len < CFG.STICK_MAX;
+      ctx.fillStyle = growing ? '#d9a066' : '#a97b4f';
+      rrect(ctx, -len, -5, len*2, 10, 5); ctx.fill();
+      ctx.fillStyle = 'rgba(255,220,160,0.5)';
+      rrect(ctx, -len, -5, len*2, 3, 2); ctx.fill();
+      if (growing) {
+        ctx.strokeStyle = 'rgba(110,231,160,' + (0.5 + Math.sin(S.t*5)*0.3) + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, len + 6, 0, 7); ctx.stroke();
+      }
+      ctx.fillStyle = '#e8c49a';
+      ctx.font = 'bold 11px system-ui'; ctx.textAlign='center';
+      ctx.fillText('ДЛ '+Math.round(e.len), 0, -10);
+      break;
+    }
+    case 'blob': {
+      const wob = Math.sin(S.t*3 + e.x)*3;
+      ctx.fillStyle = e.moist > 0 ? t.c : '#6b6b7a';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, t.r + wob*0.3, t.r*0.8, 0, 0, 7);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.ellipse(-6, -7, 7, 5, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#4cc9f0';
+      ctx.font = 'bold 11px system-ui'; ctx.textAlign='center';
+      ctx.fillText('💧' + e.moist, 0, t.r + 16);
+      break;
+    }
+    case 'striker': {
+      const fc = e.lastFire < 0.22 ? 1 : 0;
+      ctx.fillStyle = '#b45309';
+      rrect(ctx, -8, -4, 16, 8, 3); ctx.fill();
+      ctx.fillStyle = t.c;
+      ctx.beginPath(); ctx.arc(0, 0, 10 + fc*4, 0, 7); ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, 10, 0, 7); ctx.stroke();
+      break;
+    }
+    case 'rupture': {
+      const hot = e.tens > 70;
+      const pr = t.r + (hot ? Math.sin(S.t*10)*3 : 0);
+      ctx.fillStyle = t.c;
+      ctx.beginPath();
+      for (let i=0;i<8;i++) {
+        const a = i/8*Math.PI*2;
+        const rr = i%2===0 ? pr : pr*0.55;
+        ctx.lineTo(Math.cos(a)*rr, Math.sin(a)*rr);
+      }
+      ctx.closePath(); ctx.fill();
+      // кільце напруги
+      ctx.strokeStyle = hot ? 'rgba(255,255,255,0.9)' : 'rgba(255,196,0,0.8)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, t.r + 8, 0, Math.PI*2 * Math.min(1, e.tens/100)); ctx.stroke();
+      if (hot) { ctx.fillStyle='#fff'; ctx.font='bold 13px system-ui'; ctx.textAlign='center'; ctx.fillText('!', 0, 5); }
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function rrect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.arcTo(x+w, y, x+w, y+h, r);
+  ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r);
+  ctx.arcTo(x, y, x+w, y, r);
+  ctx.closePath();
+}
+
+// ---------------- INPUT ----------------
+function canvasTap(wx, wy) {
+  tapWorld(wx, wy);
+}
+function slotIndexAt(wx, wy) {
+  const st = S.struct;
+  for (let i=0;i<S.slots.length;i++) {
+    const s = S.slots[i];
+    const x = st.x + s.lx;
+    if (Math.abs(wx - x) < CFG.CELL/2 + 12 && Math.abs(wy - st.y) < CFG.CELL/2 + 16) return i;
+  }
+  return -1;
+}
+function specialSlot(i) {
+  const s = S.slots[i];
+  if (!s || s.dead || !s.el) return;
+  if (s.el.type==='striker') fireStriker(i);
+  else if (s.el.type==='rupture') detonateRupture(i);
+  else { toast('Довгий тап працює тільки для Ударника і Розриву', 1800); }
+}
+function bindCanvas() {
+  const cv = document.getElementById('cv');
+  let downX=0, downY=0, downT=0, moved=false;
+  const toWorld = (cx, cy) => {
+    const rect = cv.getBoundingClientRect();
+    return { wx: camX + (cx - rect.left)/SCALE, wy: (cy - rect.top)/SCALE };
+  };
+  const start = (e)=>{
+    const t = e.touches ? e.touches[0] : e;
+    downX = t.clientX; downY = t.clientY; downT = performance.now(); moved = false;
+  };
+  const move = (e)=>{
+    const t = e.touches ? e.touches[0] : e;
+    if (Math.abs(t.clientX-downX) > 12 || Math.abs(t.clientY-downY) > 12) moved = true;
+  };
+  const end = (e)=>{
+    if (S.over !== 'play') return;
+    const t = e.changedTouches ? e.changedTouches[0] : e;
+    const dur = performance.now() - downT;
+    const p = toWorld(t.clientX, t.clientY);
+    const si = slotIndexAt(p.wx, p.wy);
+    if (si >= 0) {
+      if (dur >= 450) specialSlot(si); else tapSlot(si);
+      return;
+    }
+    if (!moved && dur < 500) canvasTap(p.wx, p.wy);
+  };
+  cv.addEventListener('touchstart', start, {passive:true});
+  cv.addEventListener('touchmove', move, {passive:true});
+  cv.addEventListener('touchend', end, {passive:true});
+  cv.addEventListener('mousedown', start);
+  cv.addEventListener('mouseup', end);
+}
+function bindButtons() {
+  const $ = id => document.getElementById(id);
+  $('bPlay').onclick = ()=>{ setMode('play'); };
+  $('bSlow').onclick = ()=>{ setMode(S.mode==='slow' ? 'play' : 'slow'); };
+  $('bPause').onclick = ()=>{ setMode(S.mode==='pause' ? 'play' : 'pause'); };
+  $('bForces').onclick = ()=>{ S.layers.forces = !S.layers.forces; updateHUD(); };
+  $('bFields').onclick = ()=>{ S.layers.fields = !S.layers.fields; updateHUD(); };
+  $('bRes').onclick = ()=>{ S.layers.res = !S.layers.res; updateHUD(); };
+  $('bCaus').onclick = ()=>{ S.layers.caus = !S.layers.caus; updateHUD(); };
+  $('bRestart').onclick = ()=>{ restartLevel(); };
+  $('bHelp').onclick = ()=>{ document.getElementById('ovHelp').classList.remove('hidden'); };
+  $('ohClose').onclick = ()=>{ document.getElementById('ovHelp').classList.add('hidden'); };
+  $('oiGo').onclick = ()=>{ dismissIntro(); };
+  $('owNext').onclick = ()=>{
+    document.getElementById('ovWin').classList.add('hidden');
+    if (S.lvl < LEVELS.length - 1) { S.lvl++; makeLevel(S.lvl); }
+    else { makeLevel(0); }
+  };
+  $('olRetry').onclick = ()=>{ restartLevel(); };
+  $('hand').onclick = ()=>{ if (S.over==='play'||S.over==='intro') tapHand(); };
+}
+
+// ---------------- MAIN LOOP ----------------
+let lastT = 0;
+function loop(ts) {
+  const dt = Math.min(0.05, (ts - lastT)/1000 || 0.016);
+  lastT = ts;
+  if (S) step(dt);
+  if (S) draw();
+  if (S && S.toast) {
+    S.toastT -= dt*1000;
+    if (S.toastT <= 0) { S.toast = null; document.getElementById('hint').classList.add('hidden'); }
+  }
+  if (S) renderLog();
+  requestAnimationFrame(loop);
+}
+
+// ---------------- DEV HOOKS (для тестів) ----------------
+window.__q = [];
+window.__G = {
+  state() {
+    const st = S.struct;
+    return {
+      x: Math.round(st.x), y: Math.round(st.y), vx: Math.round(st.vx), mode: S.mode, over: S.over, won: S.won, lvl: S.lvl, t: Math.round(S.t*10)/10,
+      slots: S.slots.map(s=>({ el: s.el? s.el.type : null, len: s.el&&s.el.type==='stick'? Math.round(s.el.len*10)/10 : null, tens: s.el&&s.el.type==='rupture'? Math.round(s.el.tens) : null, hp: Math.round(s.hp), dead: s.dead })),
+      elems: S.elems.map(e=>({ t:e.type, x:Math.round(e.x), len:e.type==='stick'?Math.round(e.len):null, sat:e.type==='stone'?Math.round(e.sat*10)/10:null, moist:e.type==='blob'?e.moist:null })),
+      wets: S.wets.length, hand: S.hand? S.hand.type : null, platforms: S.platforms.length,
+      events: S.events.slice(0,4).map(e=>e.text),
+    };
+  },
+  setMode(m){ setMode(m); },
+  restart(){ restartLevel(); },
+  dismiss(){ dismissIntro(); },
+  take(t){ const e = S.elems.filter(x=>x.type===t && !x.air).sort((a,b)=>Math.abs(a.x-S.struct.x)-Math.abs(b.x-S.struct.x))[0]; if (e) takeElem(e); },
+  insert(i){ insertSlot(i); },
+  remove(i){ removeSlot(i); },
+  fire(i){ fireStriker(i); },
+  detonate(i){ detonateRupture(i); },
+  throwAt(x){ if (S.hand){ const gy=groundY(x); throwElem(S.hand, x, gy!=null?gy:400); } },
+  fast(sec){
+    const n = Math.ceil(sec/0.016);
+    for (let i=0;i<n;i++) step(0.016);
+  },
+  // ------- бот: проходить рівень наміченим рішенням -------
+  bot(li){
+    if (S.lvl !== li) { S.lvl = li; makeLevel(li); }
+    dismissIntro();
+    const G = window.__G;
+    const st = () => G.state();
+    return (async () => {
+      if (li === 0) {
+        while (st().x < 560) G.fast(0.4);
+        G.take('stick'); G.insert(1);
+        while (st().x < 650) G.fast(0.4);
+        G.setMode('pause');
+        G.remove(0);            // ударник у руку
+        G.throwAt(770);         // кинути ударника в пляму → вода
+        G.setMode('play');
+        G.fast(1.2);
+        if (st().wets === 0) { G.throwAt(770); G.fast(3); }
+        G.fast(8);              // ріст палки (поле ✓, вода ✓)
+        G.setMode('pause');
+        G.remove(1);            // вирощена палка в руку
+        G.throwAt(1130);        // кинути на прірву → міст
+        if (st().platforms === 0) G.throwAt(1130);
+        G.take('striker'); G.insert(0);
+        G.setMode('play');
+        G.fast(35);
+        return st();
+      }
+      if (li === 1) {
+        while (st().x < 500 && st().over==='play') G.fast(0.4);
+        G.setMode('pause');
+        G.remove(0);
+        G.throwAt(560);         // ударник → пляма → вода
+        G.setMode('play');
+        G.fast(1.2);
+        if (st().wets === 0) { G.throwAt(560); G.fast(3); }
+        G.take('stick'); G.insert(1);
+        G.fast(9);              // ріст до 14
+        G.setMode('pause');
+        G.remove(1);
+        G.throwAt(870);         // на прірву → міст
+        if (st().platforms === 0) G.throwAt(870);
+        G.take('striker'); G.insert(0);
+        G.setMode('play');
+        G.fast(35);
+        return st();
+      }
+      if (li === 2) {
+        G.fast(4);              // під'їхати до розриву
+        G.setMode('pause');
+        G.take('rupture');
+        G.insert(1);            // двигун у слот
+        G.setMode('play');
+        let guard = 0;
+        while (st().x < 830 && st().over==='play' && guard < 60) {
+          if (st().slots[1].tens >= 40) G.detonate(1);
+          G.fast(0.6);
+          guard++;
+        }
+        G.fast(20);
+        return st();
+      }
+      return st();
+    })();
+  }
+};
+
+// ---------------- INIT ----------------
+bindCanvas();
+bindButtons();
+makeLevel(0);
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
