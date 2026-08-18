@@ -139,13 +139,14 @@ function genType(r, id) {
 
 // ---------------- генерація світу ----------------
 function worldDims() {
-  // під орієнтацію екрана: портрет → вертикальний світ
+  // світ під пропорції екрана: завжди є простір для панорами і зума
   const portrait = window.innerHeight > window.innerWidth * 1.05;
-  return portrait ? { W:520, H:880 } : { W:1100, H:700 };
+  if (portrait) return { W: 520, H: Math.max(820, Math.min(1200, Math.round(520 * window.innerHeight / window.innerWidth))) };
+  return { W: 1500, H: Math.max(640, Math.min(1000, Math.round(1500 * window.innerHeight / window.innerWidth))) };
 }
 function fitZoom() {
-  // огляд світу з запасом: не впритул, а менше
-  return Math.max(0.3, Math.min(1.2, Math.min(window.innerWidth/W.W, window.innerHeight/W.H) * 0.7));
+  // трохи «впритул» (×1.05): панорама має простір одразу, без попереднього зума
+  return Math.max(0.3, Math.min(1.4, Math.min(window.innerWidth / W.W, window.innerHeight / W.H) * 1.05));
 }
 function newWorld(seed) {
   const r = rng(seed || ((Math.random()*1e9)|0));
