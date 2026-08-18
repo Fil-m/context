@@ -718,10 +718,11 @@ function renderLog() {
 // ---------------- ввід ----------------
 function bindInput() {
   const cv = document.getElementById('cv');
-  let ptrs = {};
+  const ptrs = {};
+  const TH = 7;                       // поріг зсуву: схоплення/панорама лише після нього
   const toWorld = (cx, cy) => {
-    const rect = cv.getBoundingClientRect();
-    return { x: cam.x + (cx - rect.left)/cam.z, y: cam.y + (cy - rect.top)/cam.z };
+    const r = cv.getBoundingClientRect();
+    return { x: cam.x + (cx - r.left)/cam.z, y: cam.y + (cy - r.top)/cam.z };
   };
   const hit = (wx, wy) => {
     let best=null, bd=1e9;
@@ -731,22 +732,57 @@ function bindInput() {
     }
     return best;
   };
-  const down = (id, x, y) => {
-    const w = toWorld(x, y);
+  const setPos = (id, x, y) => {
+    const p = ptrs[id]; if (!p) return;
+    p.px = p.x; p.py = p.y; p.x = x; p.y = y;
+    if (!p.moved && Math.hypot(x-p.sx, y-p.sy) > TH) p.moved = true;
+  };
+  const grabEl = (p) => {
+    const w = toWorld(p.x, p.y);
     const el = hit(w.x, w.y);
-    if (el && !pinch) {
-      dragEl = el;
-      dragDX = el.x - w.x; dragDY = el.y - w.y;
+    if (el) {
+      dragEl = el; dragDX = el.x - w.x; dragDY = el.y - w.y;
       el._dvx = 0; el._dvy = 0;
-      ptrs[id] = { x, y, t: performance.now(), el: true };
-    } else {
-      ptrs[id] = { x, y, t: performance.now(), el: false };
+      return true;
     }
+    return false;
+  };
+  const pinchStart = () => {
+    const ids = Object.keys(ptrs);
+    if (ids.length !== 2) return;
+    if (dragEl) { dragEl.vx = dragEl._dvx||0; dragEl.vy = dragEl._dvy||0; dragEl = null; }
+    const r = cv.getBoundingClientRect();
+    const a = ptrs[ids[0]], b = ptrs[ids[1]];
+    pinch = {
+      d: Math.max(8, Math.hypot(a.x-b.x, a.y-b.y)),
+      z0: cam.z, cx0: cam.x, cy0: cam.y,
+      mx: (a.x+b.x)/2 - r.left, my: (a.y+b.y)/2 - r.top,
+    };
+  };
+  const pinchUpdate = () => {
+    if (!pinch) return;
+    const ids = Object.keys(ptrs);
+    if (ids.length !== 2) return;
+    const a = ptrs[ids[0]], b = ptrs[ids[1]];
+    const d = Math.max(8, Math.hypot(a.x-b.x, a.y-b.y));
+    const z = Math.max(0.3, Math.min(2.4, pinch.z0 * d / pinch.d));
+    cam.z = z;
+    // світова точка під серединою жестів лишається під пальцями
+    const wmx = pinch.cx0 + pinch.mx / pinch.z0;
+    const wmy = pinch.cy0 + pinch.my / pinch.z0;
+    cam.x = wmx - pinch.mx / z;
+    cam.y = wmy - pinch.my / z;
   };
   const move = (id, x, y) => {
-    const pt = ptrs[id];
-    if (!pt) return;
-    if (dragEl && pt.el) {
+    const p = ptrs[id]; if (!p) return;
+    setPos(id, x, y);
+    if (Object.keys(ptrs).length === 2) {
+      if (!pinch) pinchStart();
+      pinchUpdate();
+      return;
+    }
+    if (!p.moved) return;
+    if (dragEl) {
       const w = toWorld(x, y);
       const nx = w.x + dragDX, ny = w.y + dragDY;
       dragEl._dvx = (nx - dragEl.x) * 60;
@@ -754,21 +790,30 @@ function bindInput() {
       dragEl.x = nx; dragEl.y = ny;
       dragEl.vx = 0; dragEl.vy = 0;
       clamp(dragEl);
-      pt.x = x; pt.y = y;
-      return;
-    }
-    if (!dragEl) {
-      const dx = x - pt.x, dy = y - pt.y;
-      cam.x -= dx/cam.z; cam.y -= dy/cam.z;
-      pt.x = x; pt.y = y;
+    } else {
+      if (p.onEl && !p.tried) { p.tried = true; if (!grabEl(p)) p.onEl = false; }
+      if (dragEl) {
+        const w = toWorld(x, y);
+        const nx = w.x + dragDX, ny = w.y + dragDY;
+        dragEl._dvx = (nx - dragEl.x) * 60;
+        dragEl._dvy = (ny - dragEl.y) * 60;
+        dragEl.x = nx; dragEl.y = ny;
+        dragEl.vx = 0; dragEl.vy = 0;
+        clamp(dragEl);
+        return;
+      }
+      cam.x -= (p.x - p.px) / cam.z;
+      cam.y -= (p.y - p.py) / cam.z;
     }
   };
-  const up = (id, x, y) => {
-    const pt = ptrs[id];
-    delete ptrs[id];
-    if (dragEl && pt && pt.el) {
-      dragEl.vx = dragEl._dvx || 0;
-      dragEl.vy = dragEl._dvy || 0;
+  const release = (id) => {
+    const p = ptrs[id]; delete ptrs[id];
+    if (Object.keys(ptrs).length < 2) pinch = null;
+    if (dragEl && p) {
+      if (p.moved) {
+        dragEl.vx = Math.max(-520, Math.min(520, dragEl._dvx||0));
+        dragEl.vy = Math.max(-520, Math.min(520, dragEl._dvy||0));
+      } else { dragEl.vx = 0; dragEl.vy = 0; }
       // злипання при відпусканні поруч
       let target=null, bd=1e9;
       for (const e of W.els) {
@@ -781,34 +826,45 @@ function bindInput() {
       dragEl = null;
     }
   };
+  // тач
   cv.addEventListener('touchstart', e => {
     e.preventDefault();
     for (const t of e.changedTouches) {
-      ptrs[t.identifier] = { x:t.clientX, y:t.clientY, t:performance.now(), el:false };
       const w = toWorld(t.clientX, t.clientY);
       const el = hit(w.x, w.y);
-      if (el && Object.keys(ptrs).length === 1) {
-        dragEl = el; dragDX = el.x-w.x; dragDY = el.y-w.y; el._dvx=0; el._dvy=0;
-        ptrs[t.identifier].el = true;
-      }
+      ptrs[t.identifier] = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!el, tried:false };
     }
+    if (Object.keys(ptrs).length === 2) pinchStart();
   }, {passive:false});
   cv.addEventListener('touchmove', e => {
     e.preventDefault();
     for (const t of e.changedTouches) move(t.identifier, t.clientX, t.clientY);
   }, {passive:false});
   cv.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) up(t.identifier, t.clientX, t.clientY);
+    for (const t of e.changedTouches) release(t.identifier);
   });
-  cv.addEventListener('mousedown', e => { down(0, e.clientX, e.clientY); });
-  cv.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
-  cv.addEventListener('mouseup', e => { up(0, e.clientX, e.clientY); });
+  // миша/тачпад
+  cv.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    const w = toWorld(e.clientX, e.clientY);
+    const el = hit(w.x, w.y);
+    ptrs[0] = { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, px:e.clientX, py:e.clientY, moved:false, onEl:!!el, tried:false };
+  });
+  window.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
+  window.addEventListener('mouseup', e => { if (ptrs[0]) release(0); });
+  // колесо: звичайний скрол = рух камери; Ctrl+скрол / жест-щипок тачпада = масштаб
   cv.addEventListener('wheel', e => {
     e.preventDefault();
-    const f = e.deltaY < 0 ? 1.15 : 0.87;
-    cam.z = Math.max(0.3, Math.min(2.4, cam.z * f));
+    if (e.ctrlKey) {
+      const f = e.deltaY < 0 ? 1.12 : 0.89;
+      cam.z = Math.max(0.3, Math.min(2.4, cam.z * f));
+    } else {
+      cam.x += e.deltaX / cam.z;
+      cam.y += e.deltaY / cam.z;
+    }
   }, {passive:false});
 }
+
 function bindButtons() {
   const $ = id => document.getElementById(id);
   const setMode = m => { W.mode = m; $('bPlay').classList.toggle('on', m==='play'); $('bSlow').classList.toggle('on', m==='slow'); $('bPause').classList.toggle('pause', m==='pause'); };
