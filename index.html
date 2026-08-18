@@ -62,7 +62,7 @@
     <button class="btn" id="bNew" title="новий світ">⟳</button>
   </div>
 </div>
-<div id="tip">Світ живе сам. Тягни елемент на інший і відпусти — з'єднаються в тіло. Удар або вибух рве зв'язки. ⟳ — новий світ.</div>
+<div id="tip">Світ живе сам. Тягни елемент на інший і відпусти — з'єднаються в тіло. Двома пальцями — масштаб. ⟳ — новий світ.</div>
 <div id="log"></div>
 <div id="types"></div>
 <div id="hint"></div>
@@ -138,10 +138,20 @@ function genType(r, id) {
 }
 
 // ---------------- генерація світу ----------------
+function worldDims() {
+  // під орієнтацію екрана: портрет → вертикальний світ
+  const portrait = window.innerHeight > window.innerWidth * 1.05;
+  return portrait ? { W:520, H:880 } : { W:1100, H:700 };
+}
+function fitZoom() {
+  const d = worldDims();
+  return Math.min(window.innerWidth/d.W, window.innerHeight/d.H) * 0.92;
+}
 function newWorld(seed) {
   const r = rng(seed || ((Math.random()*1e9)|0));
+  const d = worldDims();
   const w = {
-    seed, W:1100, H:700, types:[], els:[], drops:[], shocks:[], parts:[], links:[], events:[],
+    seed, W:d.W, H:d.H, types:[], els:[], drops:[], shocks:[], parts:[], links:[], events:[],
     t:0, mode:'play', layers:{fields:false, forces:false, drops:false},
   };
   // типи: 9-12
@@ -150,7 +160,7 @@ function newWorld(seed) {
   // гарантія зв'язків: підбираємо хоча б 2 пари (емітер поля → реактор)
   ensurePairs(w, r);
   // екземпляри
-  const nInst = 44 + ((r()*20)|0);
+  const nInst = (d.W < 700 ? 38 : 46) + ((r()*14)|0);
   for (let i=0;i<nInst;i++) {
     const ty = w.types[(r()*w.types.length)|0];
     w.els.push({
@@ -161,6 +171,8 @@ function newWorld(seed) {
   }
   W = w;
   try { window.__W = w; } catch(e) {}
+  cam = { x:0, y:0, z: fitZoom() };
+  try { window.__cam = cam; } catch(e) {}
   buildTypesPanel();
   return w;
 }
@@ -526,11 +538,12 @@ function draw() {
   const vw = window.innerWidth, vh = window.innerHeight;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   if (cv.width !== Math.round(vw*dpr) || cv.height !== Math.round(vh*dpr)) { cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); }
-  // камера
-  const fit = Math.min(vw/W.W, vh/W.H) * 0.92;
-  cam.z = Math.max(0.3, Math.min(2.2, cam.z || fit));
-  cam.x = Math.max(0, Math.min(W.W - vw/cam.z, cam.x));
-  cam.y = Math.max(0, Math.min(W.H - vh/cam.z, cam.y));
+  // камера: повне вписування при старті, центрування, юзер може зумити
+  cam.z = Math.max(0.3, Math.min(2.4, cam.z || fitZoom()));
+  if (vw/cam.z >= W.W) cam.x = (vw/cam.z - W.W)/2;
+  else cam.x = Math.max(0, Math.min(W.W - vw/cam.z, cam.x));
+  if (vh/cam.z >= W.H) cam.y = (vh/cam.z - W.H)/2;
+  else cam.y = Math.max(0, Math.min(W.H - vh/cam.z, cam.y));
 
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#0b0e14';
