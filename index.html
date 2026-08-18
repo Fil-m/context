@@ -62,7 +62,7 @@
     <button class="btn" id="bNew" title="новий світ">⟳</button>
   </div>
 </div>
-<div id="tip">Світ живе сам. Тягни елемент на інший і відпусти — з'єднаються в тіло. Двома пальцями — масштаб. ⟳ — новий світ.</div>
+<div id="tip">Світ живе сам. Колесо — масштаб · тягни фон — панорама · тягни елемент на інший — з'єднання. ⟳ — новий світ.</div>
 <div id="log"></div>
 <div id="types"></div>
 <div id="hint"></div>
@@ -144,8 +144,8 @@ function worldDims() {
   return portrait ? { W:520, H:880 } : { W:1100, H:700 };
 }
 function fitZoom() {
-  const d = worldDims();
-  return Math.min(window.innerWidth/d.W, window.innerHeight/d.H) * 0.92;
+  // огляд світу з запасом: не впритул, а менше
+  return Math.max(0.3, Math.min(1.2, Math.min(window.innerWidth/W.W, window.innerHeight/W.H) * 0.7));
 }
 function newWorld(seed) {
   const r = rng(seed || ((Math.random()*1e9)|0));
@@ -852,16 +852,17 @@ function bindInput() {
   });
   window.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
   window.addEventListener('mouseup', e => { if (ptrs[0]) release(0); });
-  // колесо: звичайний скрол = рух камери; Ctrl+скрол / жест-щипок тачпада = масштаб
+  // колесо: масштаб у точку курсора (як у картах); тягання фона = панорама
   cv.addEventListener('wheel', e => {
     e.preventDefault();
-    if (e.ctrlKey) {
-      const f = e.deltaY < 0 ? 1.12 : 0.89;
-      cam.z = Math.max(0.3, Math.min(2.4, cam.z * f));
-    } else {
-      cam.x += e.deltaX / cam.z;
-      cam.y += e.deltaY / cam.z;
-    }
+    const rect = cv.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const f = e.deltaY < 0 ? 1.12 : 0.89;
+    const z2 = Math.max(0.3, Math.min(3, cam.z * f));
+    // якір на курсор: точка під курсором не зсувається
+    cam.x += mx/cam.z - mx/z2;
+    cam.y += my/cam.z - my/z2;
+    cam.z = z2;
   }, {passive:false});
 }
 
