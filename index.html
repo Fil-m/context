@@ -62,7 +62,7 @@
     <button class="btn" id="bNew" title="новий світ">⟳</button>
   </div>
 </div>
-<div id="tip">Світ живе сам. Тягни елементи пальцем — переміщуй їх один до одного. ⟳ — новий світ.</div>
+<div id="tip">Світ живе сам. Тягни елемент на інший і відпусти — з'єднаються в тіло. Удар або вибух рве зв'язки. ⟳ — новий світ.</div>
 <div id="log"></div>
 <div id="types"></div>
 <div id="hint"></div>
@@ -116,7 +116,7 @@ function genType(r, id) {
   // 2) ресурси, маса, контакт — випадково
   const n = 2 + ((r()*3)|0);   // 2-4 властивості
   for (let i=0;i<n;i++) {
-    const pick = (r()*10)|0;
+    const pick = (r()*11)|0;
     switch (pick) {
       case 0: case 1: t.props.push({k:'emit_field', f:(r()*4)|0}); break;
       case 2: case 3: t.props.push({k:'react_field', f:(r()*4)|0, eff:['repel','attract','charge','grow'][(r()*4)|0]}); break;
@@ -126,6 +126,7 @@ function genType(r, id) {
       case 7: t.props.push({k:'heavy'}); break;
       case 8: t.props.push({k:'light'}); break;
       case 9: t.props.push({k:'contact'}); break;
+      case 10: t.props.push({k:'link'}); break;
     }
   }
   // важкий/легкий регулюють масу (не можуть бути одночасно)
@@ -155,10 +156,11 @@ function newWorld(seed) {
     w.els.push({
       id:i, ty, x: 60 + r()*(w.W-120), y: 70 + r()*(w.H-140),
       vx:(r()-0.5)*30, vy:(r()-0.5)*30, r: ty.baseR*(0.8 + r()*0.5), mass:ty.mass,
-      energy:0, cd:r()*3, hitCd:0,
+      energy:0, cd:r()*3, hitCd:0, bonds:[],
     });
   }
   W = w;
+  try { window.__W = w; } catch(e) {}
   buildTypesPanel();
   return w;
 }
@@ -198,6 +200,7 @@ function propText(p) {
     case 'heavy':       return 'Важкий (важко зсунути)';
     case 'light':       return 'Легкий (легко зсунути)';
     case 'contact':     return 'Передає імпульс при зіткненні';
+    case 'link':        return 'Злипається при дотику';
   }
   return p.k;
 }
@@ -246,9 +249,9 @@ function spark(x,y,c,n) {
 
 // ---------------- фізика + взаємодії ----------------
 const CFG = {
-  FR: 1.1,            // тертя
+  FR: 0.9,            // тертя
   FIELD_R: 120,       // радіус поля
-  FIELD_F: 900,       // сила притяг/відштовх
+  FIELD_F: 1000,      // сила притяг/відштовх
   CHARGE_R: 26,       // швидкість заряду
   GROW_R: 3.2,
   BURST_R: 95,
@@ -258,6 +261,9 @@ const CFG = {
   DROP_ABSORB: 40,
   CONTACT_V: 60,
   EN_DECAY: 0.25,
+  SNAP: 1.55,         // множник радіуса з'єднання (хто в межах — злипаються)
+  BOND_BREAK_V: 300,  // швидкість удару, що рве зв'язок
+  BOND_BREAK_STRETCH: 1.7, // розтяг, що рве зв'язок
 };
 
 function step(dt) {
@@ -358,6 +364,11 @@ function step(dt) {
       const rvx = b.vx-a.vx, rvy = b.vy-a.vy;
       const vn = rvx*nx + rvy*ny;
       if (vn < 0) {
+        // удар по зв'язку рве тіло
+        const bd = a.bonds.find(x=>x.o===b);
+        if (bd && Math.abs(vn) > CFG.BOND_BREAK_V) {
+          breakBond(a, bd, 'удар');
+        }
         const imp = -(1.35)*vn/(1/ma + 1/mb);
         a.vx -= nx*imp/ma; a.vy -= ny*imp/ma;
         b.vx += nx*imp/mb; b.vy += ny*imp/mb;
@@ -373,8 +384,14 @@ function step(dt) {
           spark((a.x+b.x)/2, (a.y+b.y)/2, '#ffffff', 4);
         }
       }
+      // злипання: «link»-елементи самі з'єднуються при дотику
+      if (a.ty.props.some(p=>p.k==='link') || b.ty.props.some(p=>p.k==='link')) tryBond(a, b);
     }
   }
+
+  // 5b) зв'язки: тримають тіло, рвуться від удару/розтягу
+  bondPass(dt);
+  reportBodies(dt);
 
   // 6) декор
   for (let i=W.parts.length-1;i>=0;i--) { const p=W.parts[i]; p.x+=p.vx*dt; p.y+=p.vy*dt; p.t-=dt; if (p.t<=0) W.parts.splice(i,1); }
@@ -387,6 +404,88 @@ function clamp(e) {
   if (e.x > W.W-e.r) { e.x = W.W-e.r; e.vx = -Math.abs(e.vx)*0.4; }
   if (e.y < e.r) { e.y = e.r; e.vy = Math.abs(e.vy)*0.4; }
   if (e.y > W.H-e.r) { e.y = W.H-e.r; e.vy = -Math.abs(e.vy)*0.4; }
+}
+function tryBond(a, b) {
+  if (a === b) return;
+  if (a.bonds.some(x=>x.o===b)) return;
+  if (a.bonds.length >= 6 || b.bonds.length >= 6) return; // максимум зв'язків на елемент
+  const rest = (a.r + b.r) * 0.82;
+  a.bonds.push({ o:b, rest });
+  b.bonds.push({ o:a, rest });
+  spark((a.x+b.x)/2, (a.y+b.y)/2, '#4cc9f0', 8);
+  evThrottle('bond'+Math.min(a.id,b.id), a.ty.name + ' — ' + b.ty.name + ': З\'ЄДНАНО', 1.2);
+}
+function breakBond(a, bd, cause) {
+  const o = bd.o;
+  a.bonds = a.bonds.filter(x=>x!==bd);
+  o.bonds = o.bonds.filter(x=>x.o!==a);
+  spark((a.x+o.x)/2, (a.y+o.y)/2, '#ef476f', 8);
+  evThrottle('brk'+Math.min(a.id,o.id), 'РОЗРИВ: ' + cause + ' розірвав ' + a.ty.name + ' — ' + o.ty.name, 1.2);
+  // імпульс у бік розриву
+  const dx = o.x-a.x, dy = o.y-a.y, d = Math.hypot(dx,dy) || 1;
+  a.vx -= dx/d*40; a.vy -= dy/d*40;
+  o.vx += dx/d*40; o.vy += dy/d*40;
+}
+function bondPass(dt) {
+  for (let iter=0; iter<2; iter++) {
+    for (const e of W.els) {
+      for (let bi=e.bonds.length-1; bi>=0; bi--) {
+        const bd = e.bonds[bi];
+        const o = bd.o;
+        if (!o || !o.bonds.some(x=>x.o===e)) { e.bonds.splice(bi,1); continue; }
+        const dx = o.x-e.x, dy = o.y-e.y;
+        const d = Math.hypot(dx,dy) || 1;
+        const diff = d - bd.rest;
+        if (diff > bd.rest*CFG.BOND_BREAK_STRETCH || d > (e.r+o.r)*3) { breakBond(e, bd, 'розтяг'); continue; }
+        const nx = dx/d, ny = dy/d;
+        const rv = (o.vx-e.vx)*nx + (o.vy-e.vy)*ny;
+        if (Math.abs(rv) > CFG.BOND_BREAK_V) { breakBond(e, bd, 'удар'); continue; }
+        // пружна корекція
+        const ma = e.mass, mb = o.mass, tot = ma+mb;
+        const corr = diff * 0.35;
+        e.x += nx*corr*(mb/tot); e.y += ny*corr*(mb/tot);
+        o.x -= nx*corr*(ma/tot); o.y -= ny*corr*(ma/tot);
+        // гасіння коливань уздовж зв'язку
+        const damp = rv * 0.10;
+        e.vx += nx*damp; e.vy += ny*damp;
+        o.vx -= nx*damp; o.vy -= ny*damp;
+      }
+    }
+  }
+}
+// компоненти зв'язності (тіла)
+function components() {
+  const seen = new Set(), comps = [];
+  for (const e of W.els) {
+    if (seen.has(e.id)) continue;
+    const stack = [e], comp = [];
+    seen.add(e.id);
+    while (stack.length) {
+      const c = stack.pop();
+      comp.push(c);
+      for (const bd of c.bonds) if (!seen.has(bd.o.id)) { seen.add(bd.o.id); stack.push(bd.o); }
+    }
+    comps.push(comp);
+  }
+  return comps;
+}
+function reportBodies(dt) {
+  W._bt = (W._bt||0) - dt;
+  if (W._bt > 0) return;
+  W._bt = 1.2;
+  const comps = components();
+  const now = {};
+  for (const c of comps) if (c.length >= 2) now[Math.min(...c.map(x=>x.id))] = c.length;
+  const prev = W._bodies || {};
+  for (const k in now) {
+    if (prev[k] !== now[k]) {
+      if (now[k] >= 3 && (!prev[k] || prev[k] < 3)) event('ТІЛО: ' + now[k] + ' елементи тримаються разом');
+    }
+  }
+  for (const k in prev) {
+    if (!now[k] && prev[k] >= 3) event('ТІЛО РОЗПАЛОСЯ: втрачено частини');
+  }
+  W._bodies = now;
 }
 function burst(b) {
   shock(b.x, b.y, CFG.BURST_R);
@@ -404,6 +503,20 @@ function burst(b) {
   event('ВИБУХ: ' + b.ty.name + ' розкидав силу навколо');
   link(b.x, b.y, b.x + 60, b.y, 'ВИБУХ');
   b.vx += (Math.random()-0.5)*60; b.vy += (Math.random()-0.5)*60;
+  // вибух рве зв'язки поруч
+  for (const o of W.els) {
+    if (o === b) continue;
+    const d = Math.hypot(o.x-b.x, o.y-b.y);
+    if (d < CFG.BURST_R * 1.2) {
+      for (let bi=o.bonds.length-1; bi>=0; bi--) {
+        const bd = o.bonds[bi];
+        if (Math.hypot(bd.o.x-b.x, bd.o.y-b.y) < CFG.BURST_R * 1.4 || bd.o === b) {
+          breakBond(o, bd, 'вибух');
+        }
+      }
+    }
+  }
+  for (let bi=b.bonds.length-1; bi>=0; bi--) breakBond(b, b.bonds[bi], 'вибух');
 }
 
 // ---------------- рендер ----------------
@@ -464,6 +577,18 @@ function draw() {
     ctx.fillText(lk.label, (lk.x1+lk.x2)/2, (lk.y1+lk.y2)/2 - 8);
   }
 
+  // зв'язки (тіла)
+  for (const e of W.els) {
+    for (const bd of e.bonds) {
+      if (bd.o.id < e.id) continue;
+      const dx = bd.o.x-e.x, dy = bd.o.y-e.y;
+      const d = Math.hypot(dx,dy) || 1;
+      const tension = Math.max(0, d - bd.rest)/bd.rest;
+      ctx.strokeStyle = tension > 0.6 ? 'rgba(239,71,111,0.9)' : 'rgba(76,201,240,' + (0.35 + Math.min(0.5, tension)) + ')';
+      ctx.lineWidth = 3 + tension*4;
+      ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(bd.o.x, bd.o.y); ctx.stroke();
+    }
+  }
   // краплі
   for (const d of W.drops) {
     ctx.globalAlpha = Math.min(1, d.t);
@@ -480,6 +605,23 @@ function draw() {
     drawElem(ctx, e);
   }
   if (dragEl) { ctx.globalAlpha = 0.85; drawElem(ctx, dragEl); ctx.globalAlpha = 1; }
+  // індикатор злипання: куди прилипне елемент при відпусканні
+  if (dragEl) {
+    let target=null, bd=1e9;
+    for (const e of W.els) {
+      if (e===dragEl) continue;
+      const d = Math.hypot(e.x-dragEl.x, e.y-dragEl.y);
+      const lim = (e.r + dragEl.r) * CFG.SNAP;
+      if (d < lim && d < bd) { bd = d; target = e; }
+    }
+    if (target) {
+      ctx.strokeStyle = 'rgba(76,201,240,0.8)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6,6]);
+      ctx.beginPath(); ctx.arc(target.x, target.y, target.r + 10, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
 
   // частинки та хвилі
   for (const p of W.parts) {
@@ -614,6 +756,15 @@ function bindInput() {
     if (dragEl && pt && pt.el) {
       dragEl.vx = dragEl._dvx || 0;
       dragEl.vy = dragEl._dvy || 0;
+      // злипання при відпусканні поруч
+      let target=null, bd=1e9;
+      for (const e of W.els) {
+        if (e===dragEl) continue;
+        const d = Math.hypot(e.x-dragEl.x, e.y-dragEl.y);
+        const lim = (e.r + dragEl.r) * CFG.SNAP;
+        if (d < lim && d < bd) { bd = d; target = e; }
+      }
+      if (target) tryBond(dragEl, target);
       dragEl = null;
     }
   };
@@ -675,12 +826,19 @@ function loop(ts) {
 // ---------------- dev-хуки ----------------
 window.__G = {
   state(){
+    const comps = W && W.els ? components() : [];
     return {
       seed: W.seed, t: Math.round(W.t*10)/10, mode: W.mode,
       types: W.types.map(t=>({ name:t.name, color:t.color, shape:t.shape, props:t.props.map(propText) })),
       els: W.els.length, drops: W.drops.length, events: W.events.slice(0,5).map(e=>e.text),
+      bonds: W.els.reduce((m,e)=>m+e.bonds.length,0)/2,
+      bodies: comps.filter(c=>c.length>=2).map(c=>c.length).sort((a,b)=>b-a),
       moved: W.els.reduce((m,e)=>Math.max(m, Math.hypot(e.vx,e.vy)), 0),
     };
+  },
+  bondPair(i,j){
+    if (i<W.els.length && j<W.els.length) tryBond(W.els[i], W.els[j]);
+    return this.state();
   },
   newWorld(seed){ newWorld(seed); refreshSeed(); return this.state(); },
   fast(sec){ const n = Math.ceil(sec/0.016); for (let i=0;i<n;i++) step(0.016); return this.state(); },
