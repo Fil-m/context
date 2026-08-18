@@ -174,6 +174,9 @@ function newWorld(seed) {
   W = w;
   try { window.__W = w; } catch(e) {}
   cam = { x:0, y:0, z: fitZoom() };
+  // стартова камера — по центру світу (не в куті, нічого не обрізано)
+  cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
+  cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
   try { window.__cam = cam; } catch(e) {}
   buildTypesPanel();
   return w;
@@ -738,7 +741,7 @@ function bindInput() {
     let best=null, bd=1e9;
     for (const e of W.els) {
       const d = Math.hypot(e.x-wx, e.y-wy);
-      if (d < e.r + 14 && d < bd) { bd = d; best = e; }
+      if (d < e.r + 6 && d < bd) { bd = d; best = e; }
     }
     return best;
   };
@@ -782,6 +785,7 @@ function bindInput() {
     const wmy = pinch.cy0 + pinch.my / pinch.z0;
     cam.x = wmx - pinch.mx / z;
     cam.y = wmy - pinch.my / z;
+    if (window.__clampCam) window.__clampCam();
   };
   const move = (id, x, y) => {
     const p = ptrs[id]; if (!p) return;
@@ -814,6 +818,7 @@ function bindInput() {
       }
       cam.x -= (p.x - p.px) / cam.z;
       cam.y -= (p.y - p.py) / cam.z;
+      if (window.__clampCam) window.__clampCam();
     }
   };
   const release = (id) => {
@@ -862,7 +867,7 @@ function bindInput() {
   });
   window.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
   window.addEventListener('mouseup', e => { if (ptrs[0]) release(0); });
-  // колесо: плавний масштаб у точку курсора; чистий горизонтальний свайп = панорама вбік
+  // колесо слухаємо на window: зум завжди наш, браузер сторінку не зумить
   const clampCam = () => {
     const vw = window.innerWidth, vh = window.innerHeight;
     const cz = cam.z;
@@ -872,21 +877,26 @@ function bindInput() {
     else cam.y = Math.max(0, Math.min(W.H - vh/cz, cam.y));
   };
   window.__clampCam = clampCam;
-  cv.addEventListener('wheel', e => {
+  window.addEventListener('wheel', e => {
     e.preventDefault();
     let dy = e.deltaY;
-    if (e.deltaMode === 1) dy *= 16;        // рядки
-    else if (e.deltaMode === 2) dy *= 120;  // сторінки
-    if (e.ctrlKey) dy *= 30;                // тачпад-щипок: Chrome шле дрібні значення
+    if (e.ctrlKey) {
+      // тачпад-щипок: браузери шлють сирі дрібні значення — без масштабування режимів
+      dy = dy * 30;
+    } else {
+      if (e.deltaMode === 1) dy *= 16;        // рядки
+      else if (e.deltaMode === 2) dy *= 120;  // сторінки
+    }
     // чистий горизонтальний свайп двома пальцями = карта вбік
-    if (Math.abs(e.deltaX) > Math.abs(dy)*1.2 && Math.abs(dy) < 10) {
+    if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(dy)*1.2 && Math.abs(dy) < 10) {
       cam.x += e.deltaX / cam.z;
       clampCam();
       return;
     }
     const rect = cv.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    const f = Math.exp(-dy * 0.002);
+    // безпечний крок: не більше ×2 за подію (захист від дивних драйверів)
+    const f = Math.max(0.5, Math.min(2, Math.exp(-dy * 0.002)));
     const z2 = Math.max(0.3, Math.min(3.2, cam.z * f));
     cam.x += mx/cam.z - mx/z2;
     cam.y += my/cam.z - my/z2;
