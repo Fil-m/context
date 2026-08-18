@@ -59,10 +59,11 @@
     <button class="btn" id="bForces" title="сили">⇶</button>
     <button class="btn" id="bDrops" title="ресурси">◆</button>
     <button class="btn" id="bTypes" title="типи">☰</button>
+    <button class="btn" id="bFit" title="весь світ">⌂</button>
     <button class="btn" id="bNew" title="новий світ">⟳</button>
   </div>
 </div>
-<div id="tip">Світ живе сам. Колесо — масштаб · тягни фон — панорама · тягни елемент на інший — з'єднання. ⟳ — новий світ.</div>
+<div id="tip">Колесо/щипок — масштаб · тягни фон — карта · тягни елемент на інший — з'єднання · ⌂ — весь світ · ⟳ — новий світ.</div>
 <div id="log"></div>
 <div id="types"></div>
 <div id="hint"></div>
@@ -637,6 +638,14 @@ function draw() {
     }
   }
 
+  // hover: кільце навколо того, що можна тягнути
+  if (W.hover) {
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    ctx.beginPath(); ctx.arc(W.hover.x, W.hover.y, W.hover.r + 12, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+  }
   // частинки та хвилі
   for (const p of W.parts) {
     ctx.globalAlpha = Math.max(0, Math.min(1, p.t));
@@ -853,18 +862,46 @@ function bindInput() {
   });
   window.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
   window.addEventListener('mouseup', e => { if (ptrs[0]) release(0); });
-  // колесо: масштаб у точку курсора (як у картах); тягання фона = панорама
+  // колесо: плавний масштаб у точку курсора; чистий горизонтальний свайп = панорама вбік
+  const clampCam = () => {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const cz = cam.z;
+    if (vw/cz >= W.W) cam.x = (vw/cz - W.W)/2;
+    else cam.x = Math.max(0, Math.min(W.W - vw/cz, cam.x));
+    if (vh/cz >= W.H) cam.y = (vh/cz - W.H)/2;
+    else cam.y = Math.max(0, Math.min(W.H - vh/cz, cam.y));
+  };
+  window.__clampCam = clampCam;
   cv.addEventListener('wheel', e => {
     e.preventDefault();
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;        // рядки
+    else if (e.deltaMode === 2) dy *= 120;  // сторінки
+    if (e.ctrlKey) dy *= 30;                // тачпад-щипок: Chrome шле дрібні значення
+    // чистий горизонтальний свайп двома пальцями = карта вбік
+    if (Math.abs(e.deltaX) > Math.abs(dy)*1.2 && Math.abs(dy) < 10) {
+      cam.x += e.deltaX / cam.z;
+      clampCam();
+      return;
+    }
     const rect = cv.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    const f = e.deltaY < 0 ? 1.12 : 0.89;
-    const z2 = Math.max(0.3, Math.min(3, cam.z * f));
-    // якір на курсор: точка під курсором не зсувається
+    const f = Math.exp(-dy * 0.002);
+    const z2 = Math.max(0.3, Math.min(3.2, cam.z * f));
     cam.x += mx/cam.z - mx/z2;
     cam.y += my/cam.z - my/z2;
     cam.z = z2;
+    clampCam();
   }, {passive:false});
+  // hover: показує, що під курсором можна тягнути
+  cv.addEventListener('mousemove', e => {
+    if (ptrs[0]) return;
+    const w = toWorld(e.clientX, e.clientY);
+    const el = hit(w.x, w.y);
+    W.hover = el;
+    cv.style.cursor = el ? 'grab' : 'default';
+  });
+  cv.addEventListener('mouseleave', () => { W.hover = null; cv.style.cursor = 'default'; });
 }
 
 function bindButtons() {
@@ -877,6 +914,7 @@ function bindButtons() {
   $('bForces').onclick = ()=>{ W.layers.forces = !W.layers.forces; $('bForces').classList.toggle('on', W.layers.forces); };
   $('bDrops').onclick = ()=>{ W.layers.drops = !W.layers.drops; $('bDrops').classList.toggle('on', W.layers.drops); };
   $('bTypes').onclick = ()=>{ document.getElementById('types').classList.toggle('open'); };
+  $('bFit').onclick = ()=>{ cam.z = fitZoom(); cam.x = 0; cam.y = 0; if (window.__clampCam) window.__clampCam(); };
   $('bNew').onclick = ()=>{ newWorld((Math.random()*1e9)|0); refreshSeed(); };
 }
 function refreshSeed() {
