@@ -1275,7 +1275,16 @@ function bindInput() {
     }
     return false;
   };
-  const grab = (p) => { return grabAt(p); };
+  const grab = (p) => {
+    // спершу за стартовою точкою натискання (стабільно), потім — за ПОТОЧНОЮ позицією
+    // пальця (захист від зміщення координат/швидкого пальця)
+    if (grabAt(p)) return true;
+    if (Math.abs(p.x - p.sx) + Math.abs(p.y - p.sy) > 12) {
+      const pp = Object.assign({}, p, { sx: p.x, sy: p.y });
+      return grabAt(pp);
+    }
+    return false;
+  };
   const pinchStart = () => {
     const ids = Object.keys(ptrs);
     if (ids.length !== 2) return;
@@ -1401,7 +1410,7 @@ function bindInput() {
       const p = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!h, tried:false, longT:null };
       p.longT = setTimeout(()=>{ if (ptrs[t.identifier]) longPress(p); }, 450);
       ptrs[t.identifier] = p;
-      ilog('touch↓ id=' + t.identifier + ' (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ') hit=' + (h?h.kind:'—'));
+      ilog('touch↓ id=' + t.identifier + ' (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ') w=' + Math.round(w.x) + ',' + Math.round(w.y) + ' hit=' + (h?h.kind:'—'));
     }
     if (Object.keys(ptrs).length === 2) pinchStart();
   }, {passive:false});
