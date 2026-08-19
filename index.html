@@ -32,6 +32,16 @@
     background:rgba(13,17,26,.92); border:1px solid #223049; border-radius:12px; padding:8px;
     overflow-y:auto; display:none; }
   #types.open { display:block; }
+  #inlog { position:fixed; right:8px; top:52px; z-index:9; width:min(380px, 96vw); max-height:58vh;
+    background:rgba(13,17,26,.95); border:1px solid #223049; border-radius:12px; padding:8px;
+    overflow-y:auto; display:none; font-size:10.5px; color:#9fb0cc; }
+  #inlog.open { display:block; }
+  #inlog .ilh { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  #inlog .il { border-bottom:1px solid rgba(34,48,73,.5); padding:2px 0; font-family:ui-monospace, SFMono-Regular, monospace; white-space:pre-wrap; word-break:break-all; }
+  #inlog .ilt { color:#6b7c99; }
+  #inlog .ilb { color:#4cc9f0; }
+  #inlog .ilc { color:#6ee7a0; }
+  #inlog .ile { color:#ff8fa3; }
   #types h3 { font-size:11px; color:#fca311; margin-bottom:6px; letter-spacing:1px; }
   #types h4 { font-size:10.5px; color:#6ee7a0; margin:8px 0 4px; letter-spacing:1px; }
   .tcard { border:1px solid #223049; border-radius:10px; padding:6px 8px; margin-bottom:6px; background:#10141f; }
@@ -66,11 +76,13 @@
     <button class="btn" id="bTypes" title="типи">☰</button>
     <button class="btn" id="bFit" title="весь світ">⌂</button>
     <button class="btn" id="bNew" title="новий світ">⟳</button>
+    <button class="btn" id="bLog" title="лог вводу">🧾</button>
   </div>
 </div>
-<div id="tip">Тягни уламки в ТІЛО (каркас) → заповни 3 слоти → тіло оживе. Довгий тап по елементу — розібрати на шматочки. Тягни фон — карта · колесо/щипок — масштаб.</div>
+<div id="tip">Тягни уламки в ТІЛО (каркас) → заповни 3 слоти → тіло оживе. Довгий тап по елементу — розібрати на шматочки. Тягни фон — карта · колесо/щипок — масштаб. 🧾 — лог вводу.</div>
 <div id="log"></div>
 <div id="types"></div>
+<div id="inlog"></div>
 <div id="hint"></div>
 
 <script>
@@ -198,6 +210,44 @@ let dragEl = null, panPtr = null, pinch = null;
 let logTimer = 0, hintTimer = 0;
 let fragId = 1;
 
+// ---------------- лог вводу (діагностика) ----------------
+const inputLog = [];
+function ilog(msg, cls) {
+  inputLog.push({ t: W ? Math.round(W.t*10)/10 : 0, msg, cls: cls||'' });
+  if (inputLog.length > 150) inputLog.shift();
+}
+window.__inputLog = inputLog;
+function fmtCam() {
+  return 'cam=' + Math.round(cam.x) + ',' + Math.round(cam.y) + ' z=' + Math.round(cam.z*100)/100;
+}
+function renderInLog() {
+  const el = document.getElementById('inlog');
+  if (!el || !el.classList.contains('open')) return;
+  const n = Math.min(45, inputLog.length);
+  let h = '<div class="ilh"><b style="color:#fca311;font-size:11px">ЛОГ ВВОДУ · ' + inputLog.length + '</b>' +
+          '<button class="btn" id="ibtn" style="min-width:0;height:28px;padding:0 8px;font-size:11px">📋 копіювати</button></div>';
+  for (let i = inputLog.length - n; i < inputLog.length; i++) {
+    const e = inputLog[i];
+    h += '<div class="il"><span class="ilt">t=' + e.t + 's</span> <span class="' + (e.cls||'ilb') + '">' + e.msg + '</span></div>';
+  }
+  el.innerHTML = h;
+  const btn = document.getElementById('ibtn');
+  if (btn) btn.onclick = () => {
+    const txt = inputLog.map(e => 't=' + e.t + 's ' + e.msg).join('\n');
+    const done = () => { btn.textContent = '✓ скопійовано'; setTimeout(()=>btn.textContent='📋 копіювати', 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, () => fallbackCopy(txt, done));
+    } else fallbackCopy(txt, done);
+  };
+}
+function fallbackCopy(txt, done) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta); done();
+  } catch(e) { prompt('Скопіюй вручну:', txt); }
+}
+
 // ---------------- генерація типу ----------------
 function genType(r, id) {
   const t = {
@@ -318,7 +368,9 @@ function newWorld(seed) {
     cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
     cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
     if (window.__clampCam) window.__clampCam();
+    ilog("старт: вюпорт " + window.innerWidth + "x" + window.innerHeight + " · " + fmtCam());
   }, 400);
+  ilog('newWorld seed=' + seed + ' світ ' + w.W + 'x' + w.H + ' (vp ' + window.innerWidth + 'x' + window.innerHeight + ')', 'ilc');
   buildTypesPanel();
   return w;
 }
@@ -386,11 +438,13 @@ function updateBody() {
     W.body.scale = 1.15;
     const names = W.body.slots.map(s=>s.role).join(' + ');
     event('ТІЛО ОЖИЛО: ' + names);
+    ilog('ТІЛО ОЖИЛО: ' + names, 'ilc');
     hint('ТІЛО ОЖИЛО — тепер воно реагує на поля світу');
   } else if (!full && W.body.active) {
     W.body.active = false;
     W.body.vx = 0; W.body.vy = 0; W.body.energy = 0; W.body.scale = 1;
     event('ТІЛО ЗАВМЕРЛО: схема неповна');
+    ilog('ТІЛО ЗАВМЕРЛО', 'ile');
   }
 }
 function insertFrag(fr, slot) {
@@ -400,6 +454,7 @@ function insertFrag(fr, slot) {
   if (fi >= 0) W.frags.splice(fi, 1);
   W.body.slots[slot] = fr;
   spark(W.body.x, W.body.y, '#4cc9f0', 8);
+  ilog('ВСТАВИТИ слот ' + slot + ': ' + fr.role, 'ilc');
   updateBody();
   return true;
 }
@@ -411,6 +466,7 @@ function ejectSlot(slot) {
   W.body.slots[slot] = null;
   W.frags.push(fr);
   spark(W.body.x, W.body.y, '#fca311', 6);
+  ilog('ВИЙНЯТИ слот ' + slot + ': ' + fr.role);
   updateBody();
   return true;
 }
@@ -435,6 +491,7 @@ function dismantle(e) {
     added++;
   }
   spark(x, y, ty.color, 12);
+  ilog('РОЗІБРАНО ' + ty.name + ' → ' + added + ' шматочки', 'ile');
   event('РОЗІБРАНО: ' + ty.name + ' → ' + added + ' шматочки');
 }
 
@@ -1196,6 +1253,7 @@ function bindInput() {
       if (h.kind === 'el') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; h.obj._dvx = 0; h.obj._dvy = 0; }
       if (h.kind === 'frag') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; }
       if (h.kind === 'body') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; }
+      ilog('grab ' + h.kind + ' ' + (h.kind==='el' ? h.obj.ty.name : (h.kind==='frag' ? h.obj.role : 'ТІЛО')));
       return true;
     }
     return false;
@@ -1212,6 +1270,7 @@ function bindInput() {
       z0: cam.z, cx0: cam.x, cy0: cam.y,
       mx: (a.x+b.x)/2 - r.left, my: (a.y+b.y)/2 - r.top,
     };
+    ilog('pinch↓ d=' + Math.round(pinch.d) + ' z0=' + Math.round(pinch.z0*100)/100, 'ilc');
   };
   const pinchUpdate = () => {
     if (!pinch) return;
@@ -1226,6 +1285,11 @@ function bindInput() {
     cam.x = wmx - pinch.mx / z;
     cam.y = wmy - pinch.my / z;
     if (window.__clampCam) window.__clampCam();
+    const now = Date.now();
+    if (!window.__ilPinch || now - window.__ilPinch > 150) {
+      window.__ilPinch = now;
+      ilog('pinch→ d=' + Math.round(d) + ' z=' + Math.round(z*100)/100 + ' ' + fmtCam(), 'ilc');
+    }
   };
   const move = (id, x, y) => {
     const p = ptrs[id]; if (!p) return;
@@ -1318,21 +1382,36 @@ function bindInput() {
       const p = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!h, tried:false, longT:null };
       p.longT = setTimeout(()=>{ if (ptrs[t.identifier]) longPress(p); }, 450);
       ptrs[t.identifier] = p;
+      ilog('touch↓ id=' + t.identifier + ' (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ') hit=' + (h?h.kind:'—'));
     }
     if (Object.keys(ptrs).length === 2) pinchStart();
   }, {passive:false});
   cv.addEventListener('touchmove', e => {
     e.preventDefault();
-    for (const t of e.changedTouches) move(t.identifier, t.clientX, t.clientY);
+    for (const t of e.changedTouches) {
+      const id = t.identifier, x = Math.round(t.clientX), y = Math.round(t.clientY);
+      move(id, t.clientX, t.clientY);
+      // лог не частіше ніж раз на 200ms (інакше спам)
+      const now = Date.now();
+      if (!window.__ilLast || now - window.__ilLast > 200) {
+        window.__ilLast = now;
+        ilog('touch→ id=' + id + ' (' + x + ',' + y + ') ' + (dragEl ? ('drag=' + dragEl.kind + ' ' + (dragEl.obj.ty?dragEl.obj.ty.name:(dragEl.obj.role||'ТІЛО'))) : (Object.keys(ptrs).length===2 ? 'pinch' : 'pan')) + ' ' + fmtCam());
+      }
+    }
   }, {passive:false});
   cv.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) release(t.identifier);
+    for (const t of e.changedTouches) {
+      const p = ptrs[t.identifier];
+      ilog('touch↑ id=' + t.identifier + ' moved=' + (p && p.moved ? 1 : 0));
+      release(t.identifier);
+    }
   });
   // миша
   cv.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const w = toWorld(e.clientX, e.clientY);
     const h = hit(w.x, w.y);
+    ilog('mouse↓ (' + Math.round(e.clientX) + ',' + Math.round(e.clientY) + ') hit=' + (h?h.kind:'—'));
     const p = { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, px:e.clientX, py:e.clientY, moved:false, onEl:!!h, tried:false, longT:null };
     p.longT = setTimeout(()=>{ if (ptrs[0]) longPress(p); }, 450);
     ptrs[0] = p;
@@ -1351,15 +1430,10 @@ function bindInput() {
   window.__clampCam = clampCam;
   window.addEventListener('wheel', e => {
     e.preventDefault();
-    // діагностика: показуємо, що саме шле тачпад/миша (для відлагодження)
-    const diag = (label, dx, dy, ctrl) => {
-      const el = document.getElementById('tseed');
-      if (el) el.textContent = 'seed ' + W.seed + ' · ввід: ' + label + ' (dx=' + Math.round(dx) + ' dy=' + Math.round(dy) + ' ctrl=' + (ctrl?1:0) + ')';
-    };
     if (e.ctrlKey) {
       // тачпад-щипок: браузери шлють сирі дрібні значення — зум без масштабування режимів
       zoomAt(e.clientX, e.clientY, e.deltaY * 30);
-      diag('ЗУМ(щипок)', e.deltaX, e.deltaY, true);
+      ilog('ЗУМ щипок: raw dy=' + e.deltaY + ' m=' + e.deltaMode + ' → ' + fmtCam(), 'ilc');
       return;
     }
     let dy = e.deltaY, dx = e.deltaX;
@@ -1370,11 +1444,11 @@ function bindInput() {
       cam.x += dx / cam.z;
       cam.y += dy / cam.z;
       clampCam();
-      diag('ПАНОРАМА', dx, dy, false);
+      ilog('ПАНОРАМА: dx=' + Math.round(dx) + ' dy=' + Math.round(dy) + ' m=' + e.deltaMode + ' → ' + fmtCam());
       return;
     }
     zoomAt(e.clientX, e.clientY, dy);
-    diag('ЗУМ(колесо)', dx, dy, false);
+    ilog('ЗУМ колесо: dy=' + Math.round(dy) + ' m=' + e.deltaMode + ' → ' + fmtCam(), 'ilc');
   }, {passive:false});
   // hover
   cv.addEventListener('mousemove', e => {
@@ -1391,6 +1465,7 @@ function bindInput() {
     const d = worldDims();
     if (d.W !== W.W || d.H !== W.H) {
       // світ згенерувався під малий в'юпорт (адрес-бар) — перегенерувати той самий seed під новий розмір
+      ilog('resize ' + window.innerWidth + 'x' + window.innerHeight + ' → ПЕРЕГЕНЕРАЦІЯ світу (був ' + W.W + 'x' + W.H + ')', 'ile');
       newWorld(W.seed);
       refreshSeed();
       return;
@@ -1399,6 +1474,7 @@ function bindInput() {
     cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
     cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
     if (window.__clampCam) window.__clampCam();
+    ilog('resize ' + window.innerWidth + 'x' + window.innerHeight + ' → камера ' + fmtCam());
   });
 }
 
@@ -1412,6 +1488,7 @@ function bindButtons() {
   $('bForces').onclick = ()=>{ W.layers.forces = !W.layers.forces; $('bForces').classList.toggle('on', W.layers.forces); };
   $('bDrops').onclick = ()=>{ W.layers.drops = !W.layers.drops; $('bDrops').classList.toggle('on', W.layers.drops); };
   $('bTypes').onclick = ()=>{ document.getElementById('types').classList.toggle('open'); };
+  $('bLog').onclick = ()=>{ document.getElementById('inlog').classList.toggle('open'); renderInLog(); };
   $('bFit').onclick = ()=>{ cam.z = fitZoom(); cam.x = 0; cam.y = 0; if (window.__clampCam) window.__clampCam(); };
   $('bNew').onclick = ()=>{ newWorld((Math.random()*1e9)|0); refreshSeed(); };
 }
@@ -1427,6 +1504,7 @@ function loop(ts) {
   if (W) step(dt);
   if (W) draw();
   if (W) renderLog();
+  renderInLog();
   requestAnimationFrame(loop);
 }
 
