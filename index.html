@@ -12,7 +12,7 @@
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0b0e14; color:#dfe6f2;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action:none; user-select:none; -webkit-user-select:none; }
-  #cv { position:fixed; inset:0; display:block; }
+  #cv { position:fixed; inset:0; display:block; width:100vw; height:100vh; }
   #top { position:fixed; top:0; left:0; right:0; display:flex; align-items:center; gap:6px;
     padding:6px 8px; background:rgba(11,14,20,.85); backdrop-filter:blur(6px); z-index:10; flex-wrap:wrap; }
   #tname { font-size:12px; font-weight:700; letter-spacing:1.5px; color:#4cc9f0; white-space:nowrap; }
@@ -932,6 +932,9 @@ function draw() {
   const vw = window.innerWidth, vh = window.innerHeight;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   if (cv.width !== Math.round(vw*dpr) || cv.height !== Math.round(vh*dpr)) { cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); }
+  // КРИТИЧНО: CSS-розмір canvas має = в'юпорту. Без цього на dpr>1 (телефон) canvas
+  // розтягується/зміщується, і hit рахує координати зі зсувом ("натиснув, а гра думає нижче-правіше")
+  if (cv.style.width !== vw + 'px' || cv.style.height !== vh + 'px') { cv.style.width = vw + 'px'; cv.style.height = vh + 'px'; }
   cam.z = Math.max(0.25, Math.min(3.2, cam.z || fitZoom()));
   // той самий clamp, що й clampCam: світ менший за екран → камера плаває в полях
   if (vw/cam.z >= W.W) {
