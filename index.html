@@ -355,9 +355,9 @@ function newWorld(seed) {
       energy:0, cd:r()*3, hitCd:0, bonds:[], rot:r()*6.28,
     });
   }
-  // ТІЛО: каркас із 3 слотів
+  // ТІЛО: каркас із 3 слотів, стартує у ВИПАДКОВІЙ точці світу
   w.body = {
-    x: d.W/2, y: d.H*0.5,
+    x: d.W*(0.22 + r()*0.56), y: d.H*(0.22 + r()*0.56),
     vx:0, vy:0, scale:1, energy:0,
     slots:[null, null, null],
     active:false, r: 46,
@@ -444,6 +444,9 @@ function updateBody() {
   if (full && !W.body.active) {
     W.body.active = true;
     W.body.scale = 1.15;
+    // рандомний "вихід": тіло оживає і стартує у випадковому напрямку
+    W.body.vx = (Math.random()-0.5)*180;
+    W.body.vy = (Math.random()-0.5)*180;
     const names = W.body.slots.map(s=>s.role).join(' + ');
     event('ТІЛО ОЖИЛО: ' + names);
     ilog('ТІЛО ОЖИЛО: ' + names, 'ilc');
@@ -545,7 +548,7 @@ function hint(text, sec) {
 
 // ---------------- фізика ----------------
 const CFG = {
-  FR: 0.9,
+  FR: 3.2,          // тертя: елементи швидко зупиняються, не сользять (було 0.9)
   FIELD_R: 120,
   FIELD_F: 1000,
   CHARGE_R: 26,
@@ -1340,7 +1343,7 @@ function bindInput() {
       const o = dragEl.obj;
       const nx = w.x + dragEl.dx, ny = w.y + dragEl.dy;
       if (dragEl.kind === 'el') {
-        o._dvx = (nx - o.x) * 60; o._dvy = (ny - o.y) * 60;
+        o._dvx = (nx - o.x) * 30; o._dvy = (ny - o.y) * 30;   // кидок удвічі повільніший (було 60)
         o.x = nx; o.y = ny; o.vx = 0; o.vy = 0;
         clampEl(o);
       } else if (dragEl.kind === 'frag') {
@@ -1383,8 +1386,8 @@ function bindInput() {
         }
       }
       if (dragEl.kind === 'el') {
-        dragEl.obj.vx = Math.max(-520, Math.min(520, dragEl.obj._dvx||0));
-        dragEl.obj.vy = Math.max(-520, Math.min(520, dragEl.obj._dvy||0));
+        dragEl.obj.vx = Math.max(-260, Math.min(260, dragEl.obj._dvx||0));
+        dragEl.obj.vy = Math.max(-260, Math.min(260, dragEl.obj._dvy||0));
         // злипання при відпусканні поруч (link)
         if (dragEl.obj.ty.props.some(p=>p.k==='link')) {
           let target=null, bd2=1e9;
