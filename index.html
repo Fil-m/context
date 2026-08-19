@@ -1341,9 +1341,15 @@ function bindInput() {
   window.__clampCam = clampCam;
   window.addEventListener('wheel', e => {
     e.preventDefault();
+    // діагностика: показуємо, що саме шле тачпад/миша (для відлагодження)
+    const diag = (label, dx, dy, ctrl) => {
+      const el = document.getElementById('tseed');
+      if (el) el.textContent = 'seed ' + W.seed + ' · ввід: ' + label + ' (dx=' + Math.round(dx) + ' dy=' + Math.round(dy) + ' ctrl=' + (ctrl?1:0) + ')';
+    };
     if (e.ctrlKey) {
       // тачпад-щипок: браузери шлють сирі дрібні значення — зум без масштабування режимів
       zoomAt(e.clientX, e.clientY, e.deltaY * 30);
+      diag('ЗУМ(щипок)', e.deltaX, e.deltaY, true);
       return;
     }
     let dy = e.deltaY, dx = e.deltaX;
@@ -1354,9 +1360,11 @@ function bindInput() {
       cam.x += dx / cam.z;
       cam.y += dy / cam.z;
       clampCam();
+      diag('ПАНОРАМА', dx, dy, false);
       return;
     }
     zoomAt(e.clientX, e.clientY, dy);
+    diag('ЗУМ(колесо)', dx, dy, false);
   }, {passive:false});
   // hover
   cv.addEventListener('mousemove', e => {
