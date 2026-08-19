@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#0b0e14">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>CONTEXT v3 — Тіло</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -50,7 +53,7 @@
 <canvas id="cv"></canvas>
 
 <div id="top">
-  <div id="tname">CONTEXT<span style="color:#6b7c99"> v3 · Тіло</span></div>
+  <div id="tname">CONTEXT<span style="color:#6b7c99"> v3.2 · Тіло</span></div>
   <div id="tseed"></div>
   <div style="flex:1"></div>
   <div style="display:flex;gap:6px">
@@ -263,8 +266,8 @@ function worldDims() {
   return { W: 1500, H: Math.max(640, Math.min(1000, Math.round(1500 * window.innerHeight / window.innerWidth))) };
 }
 function fitZoom() {
-  // світ помітно БІЛЬШИЙ за екран (×1.25): панорама має простір одразу, без попереднього зума
-  return Math.max(0.3, Math.min(1.6, Math.min(window.innerWidth / W.W, window.innerHeight / W.H) * 1.25));
+  // компроміс: світ на 12% більший за екран — майже весь видно, але панорама має простір
+  return Math.max(0.3, Math.min(1.6, Math.min(window.innerWidth / W.W, window.innerHeight / W.H) * 1.12));
 }
 function newWorld(seed) {
   const r = rng(seed || ((Math.random()*1e9)|0));
