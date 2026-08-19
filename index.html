@@ -1343,12 +1343,12 @@ function bindInput() {
       zoomAt(e.clientX, e.clientY, e.deltaY * 30);
       return;
     }
-    let dy = e.deltaY;
-    if (e.deltaMode === 1) dy *= 16;        // рядки
-    else if (e.deltaMode === 2) dy *= 120;  // сторінки
+    let dy = e.deltaY, dx = e.deltaX;
+    if (e.deltaMode === 1) { dy *= 16; dx *= 16; }        // рядки — нормалізуємо ОБИДВІ осі
+    else if (e.deltaMode === 2) { dy *= 120; dx *= 120; } // сторінки
     // тачпад-скрол (дрібні значення) = панорама по X та Y; колесо миші (великі кроки) = зум
     if (Math.abs(dy) <= 35) {
-      cam.x += e.deltaX / cam.z;
+      cam.x += dx / cam.z;
       cam.y += dy / cam.z;
       clampCam();
       return;
