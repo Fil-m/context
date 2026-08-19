@@ -306,9 +306,19 @@ function newWorld(seed) {
   ensurePairs(w, r);
   try { window.__W = w; } catch(e) {}
   cam = { x:0, y:0, z: fitZoom() };
+  // стартова камера — по центру світу (не в куті, нічого не обрізано)
   cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
   cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
   try { window.__cam = cam; } catch(e) {}
+  // на мобільному адресний бар ховається після завантаження → innerHeight росте →
+  // fitZoom, порахований при малому в'юпорті, лишає світ крихітним. Перераховуємо через 400ms.
+  setTimeout(() => {
+    if (!W) return;
+    cam.z = fitZoom();
+    cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
+    cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
+    if (window.__clampCam) window.__clampCam();
+  }, 400);
   buildTypesPanel();
   return w;
 }
@@ -1375,6 +1385,21 @@ function bindInput() {
     cv.style.cursor = h ? 'grab' : 'default';
   });
   cv.addEventListener('mouseleave', () => { W.hover = null; cv.style.cursor = 'default'; });
+  // мобільний адресний бар/орієнтація: поки гравець не втрутився (перші секунди) — перерахувати камеру під новий в'юпорт
+  window.addEventListener('resize', () => {
+    if (!W || W.t > 3) return;
+    const d = worldDims();
+    if (d.W !== W.W || d.H !== W.H) {
+      // світ згенерувався під малий в'юпорт (адрес-бар) — перегенерувати той самий seed під новий розмір
+      newWorld(W.seed);
+      refreshSeed();
+      return;
+    }
+    cam.z = fitZoom();
+    cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
+    cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
+    if (window.__clampCam) window.__clampCam();
+  });
 }
 
 function bindButtons() {
