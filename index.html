@@ -1218,23 +1218,26 @@ function nearestSlot(wx, wy) {
   }
   return best;
 }
-function hit(wx, wy) {
-  // спершу уламки (маленькі), потім елементи, потім тіло
+function hitAt(wx, wy, pad) {
+  // спершу уламки (маленькі), потім елементи, потім тіло. pad — розширена зона для тачів
   let best=null, bd=1e9;
   for (const f of W.frags) {
     const d = Math.hypot(f.x-wx, f.y-wy);
-    if (d < f.r + 8 && d < bd) { bd = d; best = { kind:'frag', obj:f }; }
+    if (d < f.r + 8 + (pad||0) && d < bd) { bd = d; best = { kind:'frag', obj:f }; }
   }
   for (const e of W.els) {
     const d = Math.hypot(e.x-wx, e.y-wy);
-    const lim = e.r + 6 + (e.ty.grip-1)*10;
+    const lim = e.r + 6 + (e.ty.grip-1)*10 + (pad||0);
     if (d < lim && d < bd) { bd = d; best = { kind:'el', obj:e }; }
   }
   const B = W.body;
-  if (Math.hypot(B.x-wx, B.y-wy) < B.r*B.scale + 14 && Math.hypot(B.x-wx, B.y-wy) < bd) {
+  if (Math.hypot(B.x-wx, B.y-wy) < B.r*B.scale + 14 + (pad||0) && Math.hypot(B.x-wx, B.y-wy) < bd) {
     best = { kind:'body', obj:B };
   }
   return best;
+}
+function hit(wx, wy) {
+  return hitAt(wx, wy, 0);
 }
 function zoomAt(cx, cy, dy) {
   const cv = document.getElementById('cv');
@@ -1344,7 +1347,8 @@ function bindInput() {
         clampBody();
       }
     } else {
-      if (p.onEl && !p.tried) { p.tried = true; if (!grab(p)) p.onEl = false; }
+      // граб пробуємо ЗАВЖДИ на першому русі: спершу по стартовій точці, потім по поточній
+      if (!p.tried) { p.tried = true; if (!grab(p)) p.onEl = false; }
       if (dragEl) return;
       cam.x -= (p.x - p.px) / cam.z;
       cam.y -= (p.y - p.py) / cam.z;
@@ -1407,10 +1411,12 @@ function bindInput() {
     for (const t of e.changedTouches) {
       const w = toWorld(t.clientX, t.clientY);
       const h = hit(w.x, w.y);
-      const p = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!h, tried:false, longT:null };
+      // розширена зона для тачів: палець не влучає в центр — хапаємо з запасом 26 світових px
+      const near = h ? h : hitAt(w.x, w.y, 26);
+      const p = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!near, tried:false, longT:null };
       p.longT = setTimeout(()=>{ if (ptrs[t.identifier]) longPress(p); }, 450);
       ptrs[t.identifier] = p;
-      ilog('touch↓ id=' + t.identifier + ' (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ') w=' + Math.round(w.x) + ',' + Math.round(w.y) + ' hit=' + (h?h.kind:'—'));
+      ilog('touch↓ id=' + t.identifier + ' (' + Math.round(t.clientX) + ',' + Math.round(t.clientY) + ') w=' + Math.round(w.x) + ',' + Math.round(w.y) + ' hit=' + (h?h.kind:'—') + (near && !h ? ' NEAR' : ''));
     }
     if (Object.keys(ptrs).length === 2) pinchStart();
   }, {passive:false});
