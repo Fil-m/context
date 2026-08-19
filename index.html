@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="theme-color" content="#0b0e14">
-<title>CONTEXT v2 — Світ</title>
+<title>CONTEXT v3 — Тіло</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html,body { width:100%; height:100%; overflow:hidden; background:#0b0e14; color:#dfe6f2;
@@ -25,21 +25,23 @@
     padding:4px 8px; font-size:11px; color:#c7d3e8; animation:lin .25s ease; }
   .lge b { color:#6ee7a0; font-weight:600; }
   @keyframes lin { from { opacity:0; transform:translateX(-8px);} to {opacity:1;} }
-  #types { position:fixed; right:8px; bottom:8px; z-index:9; width:min(300px, 94vw); max-height:44vh;
+  #types { position:fixed; right:8px; bottom:8px; z-index:9; width:min(320px, 94vw); max-height:48vh;
     background:rgba(13,17,26,.92); border:1px solid #223049; border-radius:12px; padding:8px;
     overflow-y:auto; display:none; }
   #types.open { display:block; }
   #types h3 { font-size:11px; color:#fca311; margin-bottom:6px; letter-spacing:1px; }
+  #types h4 { font-size:10.5px; color:#6ee7a0; margin:8px 0 4px; letter-spacing:1px; }
   .tcard { border:1px solid #223049; border-radius:10px; padding:6px 8px; margin-bottom:6px; background:#10141f; }
   .tcard .th { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
   .tcard .tic { width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:14px; }
   .tcard .tn { font-size:12.5px; font-weight:700; }
   .tcard .tp { font-size:10.5px; color:#8fa0bd; line-height:1.45; }
+  .tcard .tp .role { color:#ffd60a; font-weight:600; }
   #tip { position:fixed; top:52px; left:50%; transform:translateX(-50%); z-index:9; background:rgba(18,23,34,.85);
     border:1px solid #2c3a55; border-radius:12px; padding:6px 14px; font-size:12px; color:#9fb0cc; pointer-events:none;
-    max-width:92%; text-align:center; }
+    max-width:94%; text-align:center; }
   #hint { position:fixed; left:50%; bottom:52px; transform:translateX(-50%); z-index:9; display:none;
-    background:rgba(252,163,17,.12); border:1px solid #fca311; color:#ffd9a0; border-radius:12px;
+    background:rgba(76,201,240,.12); border:1px solid #4cc9f0; color:#a8e6ff; border-radius:12px;
     padding:8px 14px; font-size:12.5px; max-width:min(520px, 92vw); text-align:center; pointer-events:none; }
   .hidden { display:none !important; }
 </style>
@@ -48,7 +50,7 @@
 <canvas id="cv"></canvas>
 
 <div id="top">
-  <div id="tname">CONTEXT<span style="color:#6b7c99"> v2 · Світ</span></div>
+  <div id="tname">CONTEXT<span style="color:#6b7c99"> v3 · Тіло</span></div>
   <div id="tseed"></div>
   <div style="flex:1"></div>
   <div style="display:flex;gap:6px">
@@ -63,7 +65,7 @@
     <button class="btn" id="bNew" title="новий світ">⟳</button>
   </div>
 </div>
-<div id="tip">Колесо/щипок — масштаб · тягни фон — карта · тягни елемент на інший — з'єднання · ⌂ — весь світ · ⟳ — новий світ.</div>
+<div id="tip">Тягни уламки в ТІЛО (каркас) → заповни 3 слоти → тіло оживе. Довгий тап по елементу — розібрати на шматочки. Тягни фон — карта · колесо/щипок — масштаб.</div>
 <div id="log"></div>
 <div id="types"></div>
 <div id="hint"></div>
@@ -71,10 +73,12 @@
 <script>
 'use strict';
 /* ============================================================
-   CONTEXT v2 — процедурний світ-середовище (демо генерації)
-   Кожен запуск: новий seed → нові типи елементів, нові зв'язки.
-   Елемент = випадковий набір властивостей + форма + вигляд.
-   Взаємодія = збіг типів. Світ живе без гравця.
+   CONTEXT v3 — ТІЛО
+   Світ = уламки (неактивні шматочки з мітками) + природні
+   елементи (живі збірки). Гравець складає уламки в ТІЛО —
+   каркас із 3 слотів. Повна схема активує тіло: воно оживає
+   і взаємодіє з полями світу. Форми — процедурні полігони,
+   унікальні для кожного типу.
    ============================================================ */
 
 // ---------------- RNG / імена ----------------
@@ -93,88 +97,211 @@ function genName(r) {
   return s().replace(/^./, c=>c.toUpperCase()) + s() + '-' + (1 + ((r()*97)|0));
 }
 const PALETTE = ['#4cc9f0','#fca311','#b388ff','#6ee7a0','#ef476f','#ffd60a','#80ed99','#ff8fa3','#74c0fc','#c0eb75','#ffa94d','#9775fa'];
-const SHAPES = ['circle','ring','tri','square','star','blob','rod','diamond'];
-const FCOL = ['#4cc9f0','#fca311','#b388ff','#6ee7a0'];
+const FCOL = ['#4cc9f0','#fca311','#b388ff'];
 const RNAME = ['◆','●','▲'];
+const EFF_UA = { repel:'ВІДШТОВХ', attract:'ПРИТЯГ', charge:'ЗАРЯД', grow:'РІСТ' };
+
+// ---------------- генеративні форми ----------------
+// випадковий полігон: n вершин, радіуси з розкидом → жодна форма не повторюється
+function genShape(r, nMin, nMax, rrMin, rrMax) {
+  const n = nMin + ((r()*(nMax-nMin+1))|0);
+  const pts = [];
+  for (let i=0;i<n;i++) {
+    const a = (i + r()*0.4) / n * Math.PI * 2;
+    const rr = rrMin + r()*(rrMax-rrMin);
+    pts.push([Math.cos(a)*rr, Math.sin(a)*rr]);
+  }
+  return pts;
+}
+// «загостреність» форми: чим більший розкид вершин — тим «чіпкіша» форма (легше злипається)
+function shapeGrip(pts) {
+  let mn = 1e9, mx = 0;
+  for (const p of pts) { const r = Math.hypot(p[0], p[1]); mn = Math.min(mn, r); mx = Math.max(mx, r); }
+  return 1 + Math.min(0.5, (mx - mn) * 0.55);
+}
+// шматок форми: беремо підмножину вершин → уламок «схожий на батька»
+function shapeShard(pts, r) {
+  const n = 3 + ((r()*3)|0);
+  const out = [];
+  for (let i=0;i<n;i++) {
+    const src = pts[(r()*pts.length)|0];
+    out.push([src[0]*(0.7+r()*0.5), src[1]*(0.7+r()*0.5)]);
+  }
+  return out;
+}
+function polyPath(ctx, x, y, R, pts, rot) {
+  ctx.beginPath();
+  const c = Math.cos(rot), s = Math.sin(rot);
+  for (let i=0;i<pts.length;i++) {
+    const a = pts[i][0]*R, b = pts[i][1]*R;
+    const px = x + a*c - b*s, py = y + a*s + b*c;
+    if (i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+function shapeIconFor(pts) {
+  return pts.length >= 7 ? '⬡' : (pts.length >= 5 ? '⬢' : '△');
+}
+
+// ---------------- властивості та ролі ----------------
+function randProp(r) {
+  const pick = (r()*11)|0;
+  switch (pick) {
+    case 0: case 1: return {k:'emit_field', f:(r()*3)|0};
+    case 2: case 3: return {k:'react_field', f:(r()*3)|0, eff:['repel','attract','charge','grow'][(r()*4)|0]};
+    case 4: return {k:'emit_drop', res:(r()*3)|0};
+    case 5: return {k:'absorb_drop', res:(r()*3)|0, eff:['charge','grow'][(r()*2)|0]};
+    case 6: return {k:'burst', thr:50 + (r()*60)|0};
+    case 7: return {k:'heavy'};
+    case 8: return {k:'light'};
+    case 9: return {k:'contact'};
+    case 10: return {k:'link'};
+  }
+}
+function propText(p) {
+  switch (p.k) {
+    case 'emit_field':  return 'Випромінює поле №' + p.f;
+    case 'react_field': return EFF_UA[p.eff] + ' поля №' + p.f;
+    case 'emit_drop':   return 'Випромінює ресурс ' + RNAME[p.res];
+    case 'absorb_drop': return 'Поглинає ' + RNAME[p.res] + ' → ' + (p.eff==='charge'?'заряд':'ріст');
+    case 'burst':       return 'Заряд >' + p.thr + ' → ВИБУХ';
+    case 'heavy':       return 'Важкий';
+    case 'light':       return 'Легкий';
+    case 'contact':     return 'Передає імпульс';
+    case 'link':        return 'Злипається при дотику';
+  }
+  return p.k;
+}
+// мітка-роль уламка (коротка, для світу)
+function fragRole(p) {
+  switch (p.k) {
+    case 'emit_field':  return 'ПОЛЕ №' + p.f;
+    case 'react_field': return EFF_UA[p.eff] + ' №' + p.f;
+    case 'emit_drop':   return 'РЕСУРС ' + RNAME[p.res];
+    case 'absorb_drop': return 'ПОГЛИНАЧ ' + RNAME[p.res];
+    case 'burst':       return 'НАПРУГА';
+    case 'contact':     return 'КОНТАКТ';
+    case 'link':        return 'ЗЧЕПЛЕННЯ';
+    case 'heavy':       return 'МАСА';
+    case 'light':       return 'ЛЕГКІСТЬ';
+  }
+  return 'УЛАМОК';
+}
 
 // ---------------- стан ----------------
-let W = null;            // світ
+let W = null;
 let cam = { x:0, y:0, z:1 };
-let dragEl = null, dragDX = 0, dragDY = 0, panPtr = null, pinch = null;
-let logTimer = 0;
+let dragEl = null, panPtr = null, pinch = null;
+let logTimer = 0, hintTimer = 0;
+let fragId = 1;
 
 // ---------------- генерація типу ----------------
 function genType(r, id) {
   const t = {
     id, name: genName(r),
     color: PALETTE[(r()*PALETTE.length)|0],
-    shape: SHAPES[(r()*SHAPES.length)|0],
+    pts: genShape(r, 5, 9, 0.62, 1.15),
     props: [],
     mass: 1 + r()*1.6,
     baseR: 22 + r()*22,
   };
-  // 1) поле-емітер АБО реагує на поле (гарантуємо зв'язки на рівні світу)
-  // 2) ресурси, маса, контакт — випадково
+  t.grip = shapeGrip(t.pts);
   const n = 2 + ((r()*3)|0);   // 2-4 властивості
-  for (let i=0;i<n;i++) {
-    const pick = (r()*11)|0;
-    switch (pick) {
-      case 0: case 1: t.props.push({k:'emit_field', f:(r()*4)|0}); break;
-      case 2: case 3: t.props.push({k:'react_field', f:(r()*4)|0, eff:['repel','attract','charge','grow'][(r()*4)|0]}); break;
-      case 4: t.props.push({k:'emit_drop', res:(r()*3)|0}); break;
-      case 5: t.props.push({k:'absorb_drop', res:(r()*3)|0, eff:['charge','grow'][(r()*2)|0]}); break;
-      case 6: t.props.push({k:'burst', thr:50 + (r()*60)|0}); break;
-      case 7: t.props.push({k:'heavy'}); break;
-      case 8: t.props.push({k:'light'}); break;
-      case 9: t.props.push({k:'contact'}); break;
-      case 10: t.props.push({k:'link'}); break;
-    }
-  }
-  // важкий/легкий регулюють масу (не можуть бути одночасно)
+  for (let i=0;i<n;i++) t.props.push(randProp(r));
   const hasHeavy = t.props.some(p=>p.k==='heavy'), hasLight = t.props.some(p=>p.k==='light');
   if (hasHeavy && hasLight) t.props = t.props.filter(p => p.k !== 'light');
   if (hasHeavy) t.mass *= 3.2;
   if (hasLight) t.mass *= 0.35;
+  // частини типу: розбивка властивостей на 3 шматки (деякі можуть бути порожніми)
+  t.parts = [0,1,2].map(i => {
+    const chunk = t.props.filter((_, idx) => idx % 3 === i);
+    return chunk.length ? chunk : [];
+  });
   return t;
+}
+
+// ---------------- уламки (шматочки) ----------------
+function makeFrag(r, color, props, pts, x, y) {
+  const p0 = props[0] || null;
+  return {
+    id: fragId++,
+    color: color || PALETTE[(r()*PALETTE.length)|0],
+    props,
+    role: p0 ? fragRole(p0) : 'УЛАМОК',
+    pts: pts || genShape(r, 3, 6, 0.55, 1.0),
+    rot: r()*6.28,
+    x, y, r: 13 + r()*6,
+  };
+}
+function pushFrag(w, r, ty, props, x, y) {
+  // уламок від типу: беремо одну з його частин (або довільний шматок)
+  let pts, color, pr;
+  if (ty) {
+    const pi = (r()*ty.parts.length)|0;
+    pr = ty.parts[pi] || [];
+    pts = shapeShard(ty.pts, r);
+    color = ty.color;
+  } else {
+    pr = props || [randProp(r)];
+    pts = genShape(r, 3, 6, 0.55, 1.0);
+    color = null;
+  }
+  w.frags.push(makeFrag(r, color, pr, pts,
+    x !== undefined ? x : 50 + r()*(w.W-100),
+    y !== undefined ? y : 60 + r()*(w.H-120)));
+}
+function addFragProp(fr, p) {
+  if (fr.props.length < 3) fr.props.push(p);
+  const p0 = fr.props[0] || null;
+  fr.role = p0 ? fragRole(p0) : 'УЛАМОК';
 }
 
 // ---------------- генерація світу ----------------
 function worldDims() {
-  // світ під пропорції екрана: завжди є простір для панорами і зума
   const portrait = window.innerHeight > window.innerWidth * 1.05;
   if (portrait) return { W: 520, H: Math.max(820, Math.min(1200, Math.round(520 * window.innerHeight / window.innerWidth))) };
   return { W: 1500, H: Math.max(640, Math.min(1000, Math.round(1500 * window.innerHeight / window.innerWidth))) };
 }
 function fitZoom() {
-  // трохи «впритул» (×1.05): панорама має простір одразу, без попереднього зума
   return Math.max(0.3, Math.min(1.4, Math.min(window.innerWidth / W.W, window.innerHeight / W.H) * 1.05));
 }
 function newWorld(seed) {
   const r = rng(seed || ((Math.random()*1e9)|0));
   const d = worldDims();
   const w = {
-    seed, W:d.W, H:d.H, types:[], els:[], drops:[], shocks:[], parts:[], links:[], events:[],
-    t:0, mode:'play', layers:{fields:false, forces:false, drops:false},
+    seed, W:d.W, H:d.H, types:[], els:[], frags:[], drops:[], shocks:[], parts:[], links:[], events:[],
+    t:0, mode:'play', layers:{fields:false, forces:false, drops:false}, hover:null,
   };
-  // типи: 9-12
+  // типи: 9-12, кожен з унікальною формою і частинами
   const nTypes = 9 + ((r()*4)|0);
   for (let i=0;i<nTypes;i++) w.types.push(genType(r, i));
-  // гарантія зв'язків: підбираємо хоча б 2 пари (емітер поля → реактор)
-  ensurePairs(w, r);
-  // екземпляри
-  const nInst = (d.W < 700 ? 38 : 46) + ((r()*14)|0);
+  // уламки: 16-22 (з типів + універсальні)
+  const nFrags = 16 + ((r()*7)|0);
+  for (let i=0;i<nFrags;i++) {
+    if (r() < 0.6) pushFrag(w, r, w.types[(r()*w.types.length)|0]);
+    else pushFrag(w, r, null, null);
+  }
+  // природні елементи (живі збірки)
+  const nInst = (d.W < 700 ? 20 : 26) + ((r()*8)|0);
   for (let i=0;i<nInst;i++) {
     const ty = w.types[(r()*w.types.length)|0];
     w.els.push({
       id:i, ty, x: 60 + r()*(w.W-120), y: 70 + r()*(w.H-140),
       vx:(r()-0.5)*30, vy:(r()-0.5)*30, r: ty.baseR*(0.8 + r()*0.5), mass:ty.mass,
-      energy:0, cd:r()*3, hitCd:0, bonds:[],
+      energy:0, cd:r()*3, hitCd:0, bonds:[], rot:r()*6.28,
     });
   }
+  // ТІЛО: каркас із 3 слотів
+  w.body = {
+    x: d.W/2, y: d.H*0.5,
+    vx:0, vy:0, scale:1, energy:0,
+    slots:[null, null, null],
+    active:false, r: 46,
+  };
   W = w;
+  ensurePairs(w, r);
   try { window.__W = w; } catch(e) {}
   cam = { x:0, y:0, z: fitZoom() };
-  // стартова камера — по центру світу (не в куті, нічого не обрізано)
   cam.x = Math.max(0, (W.W - window.innerWidth/cam.z) / 2);
   cam.y = Math.max(0, (W.H - window.innerHeight/cam.z) / 2);
   try { window.__cam = cam; } catch(e) {}
@@ -182,70 +309,137 @@ function newWorld(seed) {
   return w;
 }
 function ensurePairs(w, r) {
-  // знайти емітерів полів; якщо нема жодного реактора на їхні поля — додати
+  // 1) серед els-типів є емітер поля
   const emitted = new Set();
   for (const t of w.types) for (const p of t.props) if (p.k==='emit_field') emitted.add(p.f);
-  if (emitted.size === 0) { // дати одному типу емітер
-    w.types[0].props.push({k:'emit_field', f:(r()*4)|0});
+  if (emitted.size === 0) {
+    w.types[0].props.push({k:'emit_field', f:(r()*3)|0});
     emitted.add(w.types[0].props.find(p=>p.k==='emit_field').f);
   }
+  // 2) на кожне емітоване поле є реактор СЕРЕД УЛАМКІВ (щоб тіло могло реагувати)
   for (const f of emitted) {
-    const hasReactor = w.types.some(t => t.props.some(p => p.k==='react_field' && p.f===f));
+    const hasReactor = w.frags.some(fr => fr.props.some(p => p.k==='react_field' && p.f===f));
     if (!hasReactor) {
-      const t = w.types[(r()*w.types.length)|0];
-      t.props.push({k:'react_field', f, eff:['repel','attract','charge','grow'][(r()*4)|0]});
+      const fr = w.frags[(r()*w.frags.length)|0];
+      addFragProp(fr, {k:'react_field', f, eff: r()<0.6?'repel':(r()<0.8?'attract':['charge','grow'][(r()*2)|0])});
     }
   }
-  // гарантія: хоча б один бурст, якщо є charge
-  if (w.types.some(t=>t.props.some(p=>p.k==='react_field' && p.eff==='charge')) &&
-      !w.types.some(t=>t.props.some(p=>p.k==='burst'))) {
-    w.types[(r()*w.types.length)|0].props.push({k:'burst', thr:60});
+  // 3) хоча б один уламок з ВІДШТОВХ/ПРИТЯГ (тіло має чим рухатись)
+  if (!w.frags.some(fr => fr.props.some(p => p.k==='react_field' && (p.eff==='repel'||p.eff==='attract')))) {
+    const f = emitted.values().next().value;
+    addFragProp(w.frags[0], {k:'react_field', f, eff:'repel'});
+  }
+  // 4) поля, які емітять уламки, мають реакторів серед els-типів (тіло впливає на світ)
+  const femit = new Set();
+  for (const fr of w.frags) for (const p of fr.props) if (p.k==='emit_field') femit.add(p.f);
+  for (const f of femit) {
+    if (!w.types.some(t => t.props.some(p => p.k==='react_field' && p.f===f))) {
+      w.types[(r()*w.types.length)|0].props.push({k:'react_field', f, eff:['repel','attract','charge','grow'][(r()*4)|0]});
+    }
+  }
+  // 5) якщо є заряд — має бути хоча б один вибух
+  const hasCharge = w.frags.some(fr=>fr.props.some(p=>p.k==='react_field'&&p.eff==='charge')) ||
+                    w.types.some(t=>t.props.some(p=>p.k==='react_field'&&p.eff==='charge'));
+  if (hasCharge && !w.frags.some(fr=>fr.props.some(p=>p.k==='burst')) && !w.types.some(t=>t.props.some(p=>p.k==='burst'))) {
+    const fr = w.frags[(r()*w.frags.length)|0];
+    addFragProp(fr, {k:'burst', thr:60});
   }
 }
 
-// ---------------- опис властивостей (для панелі) ----------------
-function propText(p) {
-  switch (p.k) {
-    case 'emit_field':  return 'Випромінює поле №' + p.f;
-    case 'react_field': {
-      const e = {repel:'Відштовхується від', attract:'Притягується до', charge:'Заряджається у', grow:'Росте у'}[p.eff];
-      return e + ' поля №' + p.f;
-    }
-    case 'emit_drop':   return 'Випромінює ресурс ' + RNAME[p.res];
-    case 'absorb_drop': return 'Поглинає ' + RNAME[p.res] + ' → ' + (p.eff==='charge'?'заряд':'ріст');
-    case 'burst':       return 'Заряд >' + p.thr + ' → ВИБУХ';
-    case 'heavy':       return 'Важкий (важко зсунути)';
-    case 'light':       return 'Легкий (легко зсунути)';
-    case 'contact':     return 'Передає імпульс при зіткненні';
-    case 'link':        return 'Злипається при дотику';
-  }
-  return p.k;
+// ---------------- ТІЛО ----------------
+// позиції слотів у локальних координатах (трикутник)
+const BODY_SLOTS = [[0,-34],[-29,20],[29,20]];
+function bodySlotXY(i) {
+  const s = BODY_SLOTS[i];
+  return { x: W.body.x + s[0]*W.body.scale, y: W.body.y + s[1]*W.body.scale };
 }
+function bodyProps() {
+  const out = [];
+  for (const s of W.body.slots) if (s) for (const p of s.props) out.push(p);
+  return out;
+}
+function bodyMass() {
+  let m = 3.4;
+  const bp = bodyProps();
+  if (bp.some(p=>p.k==='heavy')) m *= 3.0;
+  if (bp.some(p=>p.k==='light')) m *= 0.4;
+  return m;
+}
+function updateBody() {
+  const full = W.body.slots.every(s => !!s);
+  if (full && !W.body.active) {
+    W.body.active = true;
+    W.body.scale = 1.15;
+    const names = W.body.slots.map(s=>s.role).join(' + ');
+    event('ТІЛО ОЖИЛО: ' + names);
+    hint('ТІЛО ОЖИЛО — тепер воно реагує на поля світу');
+  } else if (!full && W.body.active) {
+    W.body.active = false;
+    W.body.vx = 0; W.body.vy = 0; W.body.energy = 0; W.body.scale = 1;
+    event('ТІЛО ЗАВМЕРЛО: схема неповна');
+  }
+}
+function insertFrag(fr, slot) {
+  if (slot < 0 || slot > 2) return false;
+  if (W.body.slots[slot]) return false;
+  const fi = W.frags.indexOf(fr);
+  if (fi >= 0) W.frags.splice(fi, 1);
+  W.body.slots[slot] = fr;
+  spark(W.body.x, W.body.y, '#4cc9f0', 8);
+  updateBody();
+  return true;
+}
+function ejectSlot(slot) {
+  const fr = W.body.slots[slot];
+  if (!fr) return false;
+  const s = bodySlotXY(slot);
+  fr.x = s.x + (Math.random()-0.5)*30; fr.y = s.y + (Math.random()-0.5)*30;
+  W.body.slots[slot] = null;
+  W.frags.push(fr);
+  spark(W.body.x, W.body.y, '#fca311', 6);
+  updateBody();
+  return true;
+}
+function ejectAllBody() {
+  for (let i=2;i>=0;i--) ejectSlot(i);
+  W.body.vx = 0; W.body.vy = 0; W.body.energy = 0;
+  event('ТІЛО РОЗІБРАНО');
+}
+function dismantle(e) {
+  // природний елемент розпадається на свої частини
+  const x = e.x, y = e.y;
+  const ty = e.ty;
+  // розірвати зв'язки
+  for (let bi=e.bonds.length-1; bi>=0; bi--) breakBond(e, e.bonds[bi], 'розбір');
+  W.els = W.els.filter(o => o !== e);
+  let added = 0;
+  const rr = rng((Math.random()*1e9)|0);
+  for (const part of ty.parts) {
+    if (!part.length) continue;
+    const fx = x + (Math.random()-0.5)*70, fy = y + (Math.random()-0.5)*70;
+    W.frags.push(makeFrag(rr, ty.color, part, shapeShard(ty.pts, rr), fx, fy));
+    added++;
+  }
+  spark(x, y, ty.color, 12);
+  event('РОЗІБРАНО: ' + ty.name + ' → ' + added + ' шматочки');
+}
+
+// ---------------- панель типів ----------------
 function buildTypesPanel() {
   const el = document.getElementById('types');
   let h = '<h3>ТИПИ СВІТУ · ' + W.types.length + '</h3>';
   for (const t of W.types) {
-    h += '<div class="tcard"><div class="th"><div class="tic" style="background:' + t.color + '33;color:' + t.color + '">' + shapeIcon(t) + '</div>' +
+    h += '<div class="tcard"><div class="th"><div class="tic" style="background:' + t.color + '33;color:' + t.color + '">' + shapeIconFor(t.pts) + '</div>' +
          '<div class="tn" style="color:' + t.color + '">' + t.name + '</div></div>' +
-         '<div class="tp">' + t.props.map(propText).join(' · ') + '</div></div>';
+         '<div class="tp">' + t.props.map(propText).join(' · ') + '</div>' +
+         '<div class="tp" style="color:#6b7c99">склад: ' + t.parts.map(p => p.length ? p.map(fragRole).join('+') : 'порожньо').join(' | ') + '</div></div>';
   }
+  h += '<h4>УЛАМКИ НА ПОЛІ · ' + W.frags.length + '</h4>';
+  h += '<div class="tp" style="color:#8fa0bd">Збери 3 уламки в ТІЛО — воно оживе. Довгий тап по елементу розбирає його на частини.</div>';
   el.innerHTML = h;
 }
-function shapeIcon(t) {
-  switch (t.shape) {
-    case 'circle': return '●';
-    case 'ring': return '◌';
-    case 'tri': return '▲';
-    case 'square': return '■';
-    case 'star': return '★';
-    case 'blob': return '◍';
-    case 'rod': return '▬';
-    case 'diamond': return '◆';
-  }
-  return '●';
-}
 
-// ---------------- події ----------------
+// ---------------- події / декор ----------------
 function event(text) {
   W.events.unshift({ text, t:9 });
   if (W.events.length > 7) W.events.pop();
@@ -263,13 +457,19 @@ function shock(x,y,r) { W.shocks.push({ x,y, r:0, max:r, t:0.5 }); }
 function spark(x,y,c,n) {
   for (let i=0;i<n;i++) W.parts.push({ x, y, vx:(Math.random()-0.5)*80, vy:(Math.random()-0.5)*80, t:0.6, c, r:2.5 });
 }
+function hint(text, sec) {
+  const el = document.getElementById('hint');
+  el.textContent = text;
+  el.style.display = 'block';
+  hintTimer = sec || 3.5;
+}
 
-// ---------------- фізика + взаємодії ----------------
+// ---------------- фізика ----------------
 const CFG = {
-  FR: 0.9,            // тертя
-  FIELD_R: 120,       // радіус поля
-  FIELD_F: 1000,      // сила притяг/відштовх
-  CHARGE_R: 26,       // швидкість заряду
+  FR: 0.9,
+  FIELD_R: 120,
+  FIELD_F: 1000,
+  CHARGE_R: 26,
   GROW_R: 3.2,
   BURST_R: 95,
   BURST_F: 320,
@@ -278,9 +478,10 @@ const CFG = {
   DROP_ABSORB: 40,
   CONTACT_V: 60,
   EN_DECAY: 0.25,
-  SNAP: 1.55,         // множник радіуса з'єднання (хто в межах — злипаються)
-  BOND_BREAK_V: 300,  // швидкість удару, що рве зв'язок
-  BOND_BREAK_STRETCH: 1.7, // розтяг, що рве зв'язок
+  SNAP: 1.55,
+  BOND_BREAK_V: 300,
+  BOND_BREAK_STRETCH: 1.7,
+  BODY_MASS: 2.6,
 };
 
 function step(dt) {
@@ -288,8 +489,9 @@ function step(dt) {
   if (W.mode==='slow') dt *= 0.3;
   W.t += dt;
   const els = W.els;
+  const B = W.body;
 
-  // 1) поля: емітери → реактори
+  // 1) поля: els-емітери → els-реактори (як раніше)
   for (const a of els) {
     for (const pa of a.ty.props) {
       if (pa.k !== 'emit_field') continue;
@@ -303,27 +505,62 @@ function step(dt) {
           const f = CFG.FIELD_F * (1 - d/CFG.FIELD_R) * dt;
           if (pb.eff === 'repel') { b.vx += dx/d*f; b.vy += dy/d*f; }
           else if (pb.eff === 'attract') { b.vx -= dx/d*f; b.vy -= dy/d*f; }
-          else if (pb.eff === 'charge') {
-            b.energy += CFG.CHARGE_R * dt;
-            if ((b.energy|0) !== ((b.energy - CFG.CHARGE_R*dt)|0) && b.energy > 1) {
-              evThrottle('ch'+b.id, b.ty.name + ' заряджається у полі №' + pa.f, 2.2);
-            }
-          }
+          else if (pb.eff === 'charge') { b.energy += CFG.CHARGE_R * dt; }
+          else if (pb.eff === 'grow') { b.r = Math.min(b.ty.baseR*1.9, b.r + CFG.GROW_R*dt); }
+        }
+      }
+    }
+  }
+  // 1b) els-емітери → ТІЛО (якщо тіло активне і має реактор)
+  if (B.active) {
+    const bProps = bodyProps();
+    for (const a of els) {
+      for (const pa of a.ty.props) {
+        if (pa.k !== 'emit_field') continue;
+        for (const pb of bProps) {
+          if (pb.k !== 'react_field' || pb.f !== pa.f) continue;
+          const dx = B.x - a.x, dy = B.y - a.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d > CFG.FIELD_R) continue;
+          const f = CFG.FIELD_F * 0.55 * (1 - d/CFG.FIELD_R) * dt;   // тіло важче/повільніше реагує
+          if (pb.eff === 'repel') { B.vx += dx/d*f; B.vy += dy/d*f; }
+          else if (pb.eff === 'attract') { B.vx -= dx/d*f; B.vy -= dy/d*f; }
+          else if (pb.eff === 'charge') { B.energy += CFG.CHARGE_R * dt; }
+          else if (pb.eff === 'grow') { B.scale = Math.min(1.4, B.scale + CFG.GROW_R*dt*0.03); }
+        }
+      }
+    }
+    // 1c) ТІЛО-емітер → els-реактори
+    for (const pa of bProps) {
+      if (pa.k !== 'emit_field') continue;
+      for (const b of els) {
+        for (const pb of b.ty.props) {
+          if (pb.k !== 'react_field' || pb.f !== pa.f) continue;
+          const dx = b.x - B.x, dy = b.y - B.y;
+          const d = Math.hypot(dx, dy) || 1;
+          if (d > CFG.FIELD_R) continue;
+          const f = CFG.FIELD_F * (1 - d/CFG.FIELD_R) * dt;
+          if (pb.eff === 'repel') { b.vx += dx/d*f; b.vy += dy/d*f; }
+          else if (pb.eff === 'attract') { b.vx -= dx/d*f; b.vy -= dy/d*f; }
+          else if (pb.eff === 'charge') { b.energy += CFG.CHARGE_R * dt; }
           else if (pb.eff === 'grow') { b.r = Math.min(b.ty.baseR*1.9, b.r + CFG.GROW_R*dt); }
         }
       }
     }
   }
 
-  // 2) накопичений заряд → вибух
+  // 2) накопичений заряд → вибух (els і тіло)
   for (const b of els) {
     b.energy = Math.max(0, b.energy - CFG.EN_DECAY*dt);
-    if (b.ty.props.some(p=>p.k==='burst') && b.energy >= b.ty.props.find(p=>p.k==='burst').thr) {
-      burst(b);
-    }
+    if (b.ty.props.some(p=>p.k==='burst') && b.energy >= b.ty.props.find(p=>p.k==='burst').thr) burst(b);
+  }
+  if (B.active) {
+    B.energy = Math.max(0, B.energy - CFG.EN_DECAY*dt);
+    const bp = bodyProps().find(p=>p.k==='burst');
+    if (bp && B.energy >= bp.thr) bodyBurst();
   }
 
-  // 3) краплі ресурсів
+  // 3) краплі ресурсів (els + тіло)
   for (const e of els) {
     const em = e.ty.props.find(p=>p.k==='emit_drop');
     if (em) {
@@ -334,6 +571,16 @@ function step(dt) {
       }
     }
   }
+  if (B.active) {
+    const bem = bodyProps().find(p=>p.k==='emit_drop');
+    if (bem) {
+      B._cd = (B._cd||0) - dt;
+      if (B._cd <= 0) {
+        B._cd = CFG.DROP_CD * (0.6 + Math.random()*0.8);
+        W.drops.push({ x:B.x, y:B.y, vx:(Math.random()-0.5)*40, vy:(Math.random()-0.5)*40, res:bem.res, t:CFG.DROP_LIFE, r:4.5 });
+      }
+    }
+  }
   for (let i=W.drops.length-1;i>=0;i--) {
     const d = W.drops[i];
     d.t -= dt;
@@ -341,7 +588,7 @@ function step(dt) {
     d.vx *= Math.max(0, 1 - 0.5*dt);
     d.vy *= Math.max(0, 1 - 0.5*dt);
     d.x += d.vx*dt; d.y += d.vy*dt;
-    clamp(d);
+    clampDrop(d);
     let absorbed = false;
     for (const e of els) {
       const ap = e.ty.props.find(p=>p.k==='absorb_drop' && p.res===d.res);
@@ -354,19 +601,37 @@ function step(dt) {
         break;
       }
     }
+    if (!absorbed && B.active) {
+      const ap = bodyProps().find(p=>p.k==='absorb_drop' && p.res===d.res);
+      if (ap && Math.hypot(B.x-d.x, B.y-d.y) < CFG.DROP_ABSORB) {
+        if (ap.eff==='charge') B.energy += 14;
+        else B.scale = Math.min(1.4, B.scale + 0.05);
+        spark(B.x, B.y, FCOL[d.res], 6);
+        evThrottle('abB'+d.res, 'ТІЛО поглинуло ' + RNAME[d.res] + ' → ' + (ap.eff==='charge'?'заряд':'ріст'), 2.2);
+        absorbed = true;
+      }
+    }
     if (absorbed) W.drops.splice(i,1);
   }
 
-  // 4) рух
+  // 4) рух els
   for (const e of els) {
     e.vx *= Math.max(0, 1 - CFG.FR*dt);
     e.vy *= Math.max(0, 1 - CFG.FR*dt);
     e.x += e.vx*dt; e.y += e.vy*dt;
+    e.rot = (e.rot||0) + e.vx*dt*0.004;
     e.mass = e.ty.mass * (e.r/e.ty.baseR) * (e.r/e.ty.baseR) * 0.6;
-    clamp(e);
+    clampEl(e);
   }
+  // 4b) рух ТІЛА (тільки активне; неактивне стоїть)
+  if (B.active) {
+    B.vx *= Math.max(0, 1 - CFG.FR*dt);
+    B.vy *= Math.max(0, 1 - CFG.FR*dt);
+    B.x += B.vx*dt; B.y += B.vy*dt;
+    clampBody();
+  } else { B.vx = 0; B.vy = 0; }
 
-  // 5) зіткнення (штовхають одне одного)
+  // 5) зіткнення els↔els (як раніше)
   for (let i=0;i<els.length;i++) for (let j=i+1;j<els.length;j++) {
     const a = els[i], b = els[j];
     const dx = b.x-a.x, dy = b.y-a.y;
@@ -381,32 +646,52 @@ function step(dt) {
       const rvx = b.vx-a.vx, rvy = b.vy-a.vy;
       const vn = rvx*nx + rvy*ny;
       if (vn < 0) {
-        // удар по зв'язку рве тіло
         const bd = a.bonds.find(x=>x.o===b);
-        if (bd && Math.abs(vn) > CFG.BOND_BREAK_V) {
-          breakBond(a, bd, 'удар');
-        }
+        if (bd && Math.abs(vn) > CFG.BOND_BREAK_V) breakBond(a, bd, 'удар');
         const imp = -(1.35)*vn/(1/ma + 1/mb);
         a.vx -= nx*imp/ma; a.vy -= ny*imp/ma;
         b.vx += nx*imp/mb; b.vy += ny*imp/mb;
         if (Math.abs(vn) > CFG.CONTACT_V) {
-          // контактний імпульс: передача сили
           const ka = a.ty.props.some(p=>p.k==='contact'), kb = b.ty.props.some(p=>p.k==='contact');
           if (ka || kb) {
             const kick = Math.abs(vn)*0.55;
             if (ka) { a.vx -= nx*kick; a.vy -= ny*kick; }
             if (kb) { b.vx += nx*kick; b.vy += ny*kick; }
-            evThrottle('ct'+Math.min(a.id,b.id), 'Зіткнення: ' + (ka?a.ty.name+' →':'') + (kb?' '+b.ty.name:'') + ' передає імпульс', 2.5);
           }
           spark((a.x+b.x)/2, (a.y+b.y)/2, '#ffffff', 4);
         }
       }
-      // злипання: «link»-елементи самі з'єднуються при дотику
-      if (a.ty.props.some(p=>p.k==='link') || b.ty.props.some(p=>p.k==='link')) tryBond(a, b);
+      if (a.ty.props.some(p=>p.k==='link') || b.ty.props.some(p=>p.k==='link')) {
+        const lim = (a.r + b.r) * CFG.SNAP * a.ty.grip;
+        tryBond(a, b, lim);
+      }
+    }
+  }
+  // 5b) els ↔ ТІЛО (активне тіло — фізичне тіло)
+  if (B.active) {
+    const bm = bodyMass();
+    for (const e of els) {
+      const dx = e.x - B.x, dy = e.y - B.y;
+      const d = Math.hypot(dx, dy) || 1;
+      const min = e.r + B.r * B.scale * 0.8;
+      if (d < min) {
+        const nx = dx/d, ny = dy/d;
+        const overlap = min - d;
+        const em = e.mass, tot = em + bm;
+        e.x -= nx*overlap*(bm/tot); e.y -= ny*overlap*(bm/tot);
+        B.x += nx*overlap*(em/tot); B.y += ny*overlap*(em/tot);
+        const rvx = e.vx-B.vx, rvy = e.vy-B.vy;
+        const vn = rvx*nx + rvy*ny;
+        if (vn < 0) {
+          const imp = -(1.2)*vn/(1/em + 1/bm);
+          e.vx -= nx*imp/em; e.vy -= ny*imp/em;
+          B.vx += nx*imp/bm; B.vy += ny*imp/bm;
+        }
+      }
     }
   }
 
-  // 5b) зв'язки: тримають тіло, рвуться від удару/розтягу
+  // 5c) зв'язки (тільки els)
   bondPass(dt);
   reportBodies(dt);
 
@@ -416,16 +701,48 @@ function step(dt) {
   for (let i=W.links.length-1;i>=0;i--) { W.links[i].t-=dt; if (W.links[i].t<=0) W.links.splice(i,1); }
   for (let i=W.events.length-1;i>=0;i--) { W.events[i].t-=dt; if (W.events[i].t<=0) W.events.splice(i,1); }
 }
-function clamp(e) {
+function clampDrop(d) {
+  if (d.x < d.r) d.x = d.r;
+  if (d.x > W.W-d.r) d.x = W.W-d.r;
+  if (d.y < d.r) d.y = d.r;
+  if (d.y > W.H-d.r) d.y = W.H-d.r;
+}
+function clampEl(e) {
   if (e.x < e.r) { e.x = e.r; e.vx = Math.abs(e.vx)*0.4; }
   if (e.x > W.W-e.r) { e.x = W.W-e.r; e.vx = -Math.abs(e.vx)*0.4; }
   if (e.y < e.r) { e.y = e.r; e.vy = Math.abs(e.vy)*0.4; }
   if (e.y > W.H-e.r) { e.y = W.H-e.r; e.vy = -Math.abs(e.vy)*0.4; }
 }
-function tryBond(a, b) {
+function clampBody() {
+  const R = W.body.r * W.body.scale;
+  if (W.body.x < R) { W.body.x = R; W.body.vx = Math.abs(W.body.vx)*0.4; }
+  if (W.body.x > W.W-R) { W.body.x = W.W-R; W.body.vx = -Math.abs(W.body.vx)*0.4; }
+  if (W.body.y < R) { W.body.y = R; W.body.vy = Math.abs(W.body.vy)*0.4; }
+  if (W.body.y > W.H-R) { W.body.y = W.H-R; W.body.vy = -Math.abs(W.body.vy)*0.4; }
+}
+function bodyBurst() {
+  const B = W.body;
+  shock(B.x, B.y, CFG.BURST_R);
+  spark(B.x, B.y, '#ef476f', 16);
+  for (const o of W.els) {
+    const d = Math.hypot(o.x-B.x, o.y-B.y);
+    if (d < CFG.BURST_R && d > 0.1) {
+      const f = CFG.BURST_F * (1 - d/CFG.BURST_R);
+      o.vx += (o.x-B.x)/d * f / o.mass;
+      o.vy += (o.y-B.y)/d * f / o.mass;
+    }
+  }
+  B.energy = 0;
+  event('ТІЛО РОЗПАЛОСЯ: вибух розкидав шматочки');
+  link(B.x, B.y, B.x + 60, B.y, 'ВИБУХ');
+  for (let i=2;i>=0;i--) ejectSlot(i);
+  updateBody();
+}
+function tryBond(a, b, lim) {
   if (a === b) return;
   if (a.bonds.some(x=>x.o===b)) return;
-  if (a.bonds.length >= 6 || b.bonds.length >= 6) return; // максимум зв'язків на елемент
+  if (a.bonds.length >= 6 || b.bonds.length >= 6) return;
+  if (Math.hypot(b.x-a.x, b.y-a.y) > lim) return;
   const rest = (a.r + b.r) * 0.82;
   a.bonds.push({ o:b, rest });
   b.bonds.push({ o:a, rest });
@@ -438,7 +755,6 @@ function breakBond(a, bd, cause) {
   o.bonds = o.bonds.filter(x=>x.o!==a);
   spark((a.x+o.x)/2, (a.y+o.y)/2, '#ef476f', 8);
   evThrottle('brk'+Math.min(a.id,o.id), 'РОЗРИВ: ' + cause + ' розірвав ' + a.ty.name + ' — ' + o.ty.name, 1.2);
-  // імпульс у бік розриву
   const dx = o.x-a.x, dy = o.y-a.y, d = Math.hypot(dx,dy) || 1;
   a.vx -= dx/d*40; a.vy -= dy/d*40;
   o.vx += dx/d*40; o.vy += dy/d*40;
@@ -457,12 +773,10 @@ function bondPass(dt) {
         const nx = dx/d, ny = dy/d;
         const rv = (o.vx-e.vx)*nx + (o.vy-e.vy)*ny;
         if (Math.abs(rv) > CFG.BOND_BREAK_V) { breakBond(e, bd, 'удар'); continue; }
-        // пружна корекція
         const ma = e.mass, mb = o.mass, tot = ma+mb;
         const corr = diff * 0.35;
         e.x += nx*corr*(mb/tot); e.y += ny*corr*(mb/tot);
         o.x -= nx*corr*(ma/tot); o.y -= ny*corr*(ma/tot);
-        // гасіння коливань уздовж зв'язку
         const damp = rv * 0.10;
         e.vx += nx*damp; e.vy += ny*damp;
         o.vx -= nx*damp; o.vy -= ny*damp;
@@ -470,7 +784,6 @@ function bondPass(dt) {
     }
   }
 }
-// компоненти зв'язності (тіла)
 function components() {
   const seen = new Set(), comps = [];
   for (const e of W.els) {
@@ -496,11 +809,11 @@ function reportBodies(dt) {
   const prev = W._bodies || {};
   for (const k in now) {
     if (prev[k] !== now[k]) {
-      if (now[k] >= 3 && (!prev[k] || prev[k] < 3)) event('ТІЛО: ' + now[k] + ' елементи тримаються разом');
+      if (now[k] >= 3 && (!prev[k] || prev[k] < 3)) event('ТІЛО (природне): ' + now[k] + ' елементи тримаються разом');
     }
   }
   for (const k in prev) {
-    if (!now[k] && prev[k] >= 3) event('ТІЛО РОЗПАЛОСЯ: втрачено частини');
+    if (!now[k] && prev[k] >= 3) event('ПРИРОДНЕ ТІЛО РОЗПАЛОСЯ');
   }
   W._bodies = now;
 }
@@ -520,16 +833,13 @@ function burst(b) {
   event('ВИБУХ: ' + b.ty.name + ' розкидав силу навколо');
   link(b.x, b.y, b.x + 60, b.y, 'ВИБУХ');
   b.vx += (Math.random()-0.5)*60; b.vy += (Math.random()-0.5)*60;
-  // вибух рве зв'язки поруч
   for (const o of W.els) {
     if (o === b) continue;
     const d = Math.hypot(o.x-b.x, o.y-b.y);
     if (d < CFG.BURST_R * 1.2) {
       for (let bi=o.bonds.length-1; bi>=0; bi--) {
         const bd = o.bonds[bi];
-        if (Math.hypot(bd.o.x-b.x, bd.o.y-b.y) < CFG.BURST_R * 1.4 || bd.o === b) {
-          breakBond(o, bd, 'вибух');
-        }
+        if (Math.hypot(bd.o.x-b.x, bd.o.y-b.y) < CFG.BURST_R * 1.4 || bd.o === b) breakBond(o, bd, 'вибух');
       }
     }
   }
@@ -543,7 +853,6 @@ function draw() {
   const vw = window.innerWidth, vh = window.innerHeight;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   if (cv.width !== Math.round(vw*dpr) || cv.height !== Math.round(vh*dpr)) { cv.width = Math.round(vw*dpr); cv.height = Math.round(vh*dpr); }
-  // камера: повне вписування при старті, центрування, юзер може зумити
   cam.z = Math.max(0.3, Math.min(2.4, cam.z || fitZoom()));
   if (vw/cam.z >= W.W) cam.x = (vw/cam.z - W.W)/2;
   else cam.x = Math.max(0, Math.min(W.W - vw/cam.z, cam.x));
@@ -579,9 +888,16 @@ function draw() {
       ctx.textAlign = 'center';
       ctx.fillText('ПОЛЕ №' + p.f, e.x, e.y - CFG.FIELD_R - 8);
     }
+    if (W.body.active) for (const p of bodyProps()) if (p.k==='emit_field') {
+      ctx.strokeStyle = FCOL[p.f] + '77';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([8,8]);
+      ctx.beginPath(); ctx.arc(W.body.x, W.body.y, CFG.FIELD_R, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 
-  // каузальність (завжди м'яко)
+  // каузальність
   for (const lk of W.links) {
     const a = Math.min(1, lk.t);
     ctx.strokeStyle = 'rgba(255,196,0,' + (0.7*a) + ')';
@@ -595,7 +911,7 @@ function draw() {
     ctx.fillText(lk.label, (lk.x1+lk.x2)/2, (lk.y1+lk.y2)/2 - 8);
   }
 
-  // зв'язки (тіла)
+  // зв'язки els
   for (const e of W.els) {
     for (const bd of e.bonds) {
       if (bd.o.id < e.id) continue;
@@ -607,6 +923,7 @@ function draw() {
       ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(bd.o.x, bd.o.y); ctx.stroke();
     }
   }
+
   // краплі
   for (const d of W.drops) {
     ctx.globalAlpha = Math.min(1, d.t);
@@ -617,38 +934,67 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // елементи
-  for (const e of W.els) {
-    if (e === dragEl) continue;
-    drawElem(ctx, e);
-  }
-  if (dragEl) { ctx.globalAlpha = 0.85; drawElem(ctx, dragEl); ctx.globalAlpha = 1; }
-  // індикатор злипання: куди прилипне елемент при відпусканні
-  if (dragEl) {
-    let target=null, bd=1e9;
-    for (const e of W.els) {
-      if (e===dragEl) continue;
-      const d = Math.hypot(e.x-dragEl.x, e.y-dragEl.y);
-      const lim = (e.r + dragEl.r) * CFG.SNAP;
-      if (d < lim && d < bd) { bd = d; target = e; }
-    }
-    if (target) {
-      ctx.strokeStyle = 'rgba(76,201,240,0.8)';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([6,6]);
-      ctx.beginPath(); ctx.arc(target.x, target.y, target.r + 10, 0, 7); ctx.stroke();
-      ctx.setLineDash([]);
+  // уламки (неактивні шматочки)
+  for (const f of W.frags) {
+    if (dragEl && dragEl.kind==='frag' && dragEl.obj===f) continue;
+    ctx.globalAlpha = 0.92;
+    ctx.fillStyle = f.color;
+    polyPath(ctx, f.x, f.y, f.r, f.pts, f.rot);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    if (cam.z > 0.5) {
+      ctx.fillStyle = 'rgba(255,214,10,0.9)';
+      ctx.font = 'bold ' + Math.max(8.5, 10*cam.z) + 'px system-ui';
+      ctx.textAlign = 'center';
+      ctx.fillText(f.role, f.x, f.y + f.r + 13);
     }
   }
 
-  // hover: кільце навколо того, що можна тягнути
+  // елементи
+  for (const e of W.els) {
+    if (dragEl && dragEl.kind==='el' && dragEl.obj===e) continue;
+    drawElem(ctx, e);
+  }
+  if (dragEl) {
+    if (dragEl.kind==='el') { ctx.globalAlpha = 0.85; drawElem(ctx, dragEl.obj); ctx.globalAlpha = 1; }
+    if (dragEl.kind==='frag') {
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = dragEl.obj.color;
+      polyPath(ctx, dragEl.obj.x, dragEl.obj.y, dragEl.obj.r, dragEl.obj.pts, dragEl.obj.rot);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // підсвітка цільового слота
+      const slot = nearestSlot(dragEl.obj.x, dragEl.obj.y);
+      if (slot >= 0) {
+        const s = bodySlotXY(slot);
+        ctx.strokeStyle = 'rgba(76,201,240,0.9)';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([5,5]);
+        ctx.beginPath(); ctx.arc(s.x, s.y, 20, 0, 7); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+    if (dragEl.kind==='body') {
+      ctx.globalAlpha = 0.85;
+      drawBody(ctx, dragEl.obj);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ТІЛО
+  drawBody(ctx, W.body);
+
+  // hover
   if (W.hover) {
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
     ctx.lineWidth = 2;
     ctx.setLineDash([5,5]);
-    ctx.beginPath(); ctx.arc(W.hover.x, W.hover.y, W.hover.r + 12, 0, 7); ctx.stroke();
+    if (W.hover.kind==='el') ctx.beginPath(), ctx.arc(W.hover.obj.x, W.hover.obj.y, W.hover.obj.r + 12, 0, 7), ctx.stroke();
+    else if (W.hover.kind==='frag') ctx.beginPath(), ctx.arc(W.hover.obj.x, W.hover.obj.y, W.hover.obj.r + 8, 0, 7), ctx.stroke();
+    else if (W.hover.kind==='body') ctx.beginPath(), ctx.arc(W.hover.obj.x, W.hover.obj.y, W.hover.obj.r*W.hover.obj.scale + 12, 0, 7), ctx.stroke();
     ctx.setLineDash([]);
   }
+
   // частинки та хвилі
   for (const p of W.parts) {
     ctx.globalAlpha = Math.max(0, Math.min(1, p.t));
@@ -664,53 +1010,94 @@ function draw() {
 }
 function drawElem(ctx, e) {
   const t = e.ty;
-  // тінь
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath(); ctx.arc(e.x + 3, e.y + 4, e.r, 0, 7); ctx.fill();
-  // форма
   ctx.fillStyle = t.color;
-  ctx.strokeStyle = t.color;
-  ctx.lineWidth = 2;
-  const R = e.r;
-  ctx.beginPath();
-  switch (t.shape) {
-    case 'circle': ctx.arc(e.x, e.y, R, 0, 7); break;
-    case 'ring': ctx.arc(e.x, e.y, R, 0, 7); ctx.stroke(); ctx.fillStyle='transparent'; break;
-    case 'tri': tri(ctx, e.x, e.y, R); break;
-    case 'square': ctx.rect(e.x-R, e.y-R, R*2, R*2); break;
-    case 'star': star(ctx, e.x, e.y, R, R*0.55); break;
-    case 'blob': blob(ctx, e.x, e.y, R); break;
-    case 'rod': ctx.ellipse(e.x, e.y, R*1.4, R*0.55, 0.4, 0, 7); break;
-    case 'diamond': diamond(ctx, e.x, e.y, R); break;
-  }
+  polyPath(ctx, e.x, e.y, e.r, t.pts, e.rot||0);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1.5;
+  polyPath(ctx, e.x, e.y, e.r, t.pts, e.rot||0);
+  ctx.stroke();
   // заряд
   if (e.energy > 2) {
     const bp = t.props.find(p=>p.k==='burst');
     const thr = bp ? bp.thr : 80;
     ctx.strokeStyle = 'rgba(239,71,111,0.85)';
     ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(e.x, e.y, R+5, 0, Math.PI*2*Math.min(1, e.energy/thr)); ctx.stroke();
-    if (e.energy/thr > 0.8) { spark(e.x, e.y, '#ef476f', 1); }
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r+5, 0, Math.PI*2*Math.min(1, e.energy/thr)); ctx.stroke();
   }
   // індикатор реакції на поле
   for (const p of t.props) if (p.k==='react_field') {
     ctx.strokeStyle = FCOL[p.f] + 'aa';
     ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(e.x, e.y, R+9, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r+9, 0, 7); ctx.stroke();
   }
-  // ім'я
   if (cam.z > 0.55) {
     ctx.fillStyle = 'rgba(223,230,242,0.75)';
     ctx.font = 'bold ' + Math.max(10, 12*cam.z) + 'px system-ui';
     ctx.textAlign = 'center';
-    ctx.fillText(t.name, e.x, e.y + R + 16);
+    ctx.fillText(t.name, e.x, e.y + e.r + 16);
   }
 }
-function tri(ctx,x,y,r){ ctx.moveTo(x, y-r); ctx.lineTo(x+r*0.9, y+r*0.7); ctx.lineTo(x-r*0.9, y+r*0.7); ctx.closePath(); }
-function star(ctx,x,y,R,r){ for(let i=0;i<10;i++){ const a=i/10*Math.PI*2; const rr=i%2===0?R:r; ctx.lineTo(x+Math.cos(a)*rr, y+Math.sin(a)*rr); } ctx.closePath(); }
-function blob(ctx,x,y,R){ const wb=Math.sin(W.t*2+x*0.05)*0.15; ctx.ellipse(x,y,R*(1+wb*0.3),R*(1-wb*0.3),0,0,7); ctx.closePath(); }
-function diamond(ctx,x,y,R){ ctx.moveTo(x,y-R); ctx.lineTo(x+R,y); ctx.lineTo(x,y+R); ctx.lineTo(x-R,y); ctx.closePath(); }
+function drawBody(ctx, B) {
+  const sc = B.scale;
+  // каркас: полігон через слоти (розширений)
+  const pts = BODY_SLOTS.map(s => [s[0]*sc, s[1]*sc]);
+  if (B.active) {
+    const col = (B.slots[0]||{}).color || '#4cc9f0';
+    ctx.fillStyle = col + '33';
+    polyPath(ctx, B.x, B.y, 1, pts, 0);
+    ctx.fill();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = 3;
+    polyPath(ctx, B.x, B.y, 1, pts, 0);
+    ctx.stroke();
+    // кільце-індикатор активності
+    ctx.strokeStyle = 'rgba(110,231,160,0.8)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.arc(B.x, B.y, 30*sc + 8 + Math.sin(W.t*3)*3, 0, 7); ctx.stroke();
+    ctx.setLineDash([]);
+    // заряд
+    if (B.energy > 2) {
+      const bp = bodyProps().find(p=>p.k==='burst');
+      const thr = bp ? bp.thr : 80;
+      ctx.strokeStyle = 'rgba(239,71,111,0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(B.x, B.y, 30*sc + 14, 0, Math.PI*2*Math.min(1, B.energy/thr)); ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = 'rgba(110,167,199,0.55)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5,5]);
+    polyPath(ctx, B.x, B.y, 1, pts, 0);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // слоти
+  for (let i=0;i<3;i++) {
+    const s = bodySlotXY(i);
+    const fr = B.slots[i];
+    if (fr) {
+      ctx.fillStyle = fr.color;
+      polyPath(ctx, s.x, s.y, 13, fr.pts, fr.rot);
+      ctx.fill();
+    } else {
+      ctx.strokeStyle = B.active ? 'rgba(110,231,160,0.8)' : 'rgba(110,167,199,0.4)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.arc(s.x, s.y, 13, 0, 7); ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+  // підпис
+  const filled = B.slots.filter(Boolean).length;
+  ctx.fillStyle = B.active ? '#6ee7a0' : 'rgba(155,180,210,0.85)';
+  ctx.font = 'bold ' + Math.max(10, 12*cam.z) + 'px system-ui';
+  ctx.textAlign = 'center';
+  ctx.fillText(B.active ? 'ТІЛО АКТИВНЕ' : 'ТІЛО · ' + filled + '/3', B.x, B.y + 52*sc + 6);
+}
 
 // ---------------- лог ----------------
 function renderLog() {
@@ -726,36 +1113,62 @@ function renderLog() {
     d.textContent = W.events[i].text;
     el.appendChild(d);
   }
+  if (hintTimer > 0) {
+    hintTimer -= 0.4;
+    if (hintTimer <= 0) document.getElementById('hint').style.display = 'none';
+  }
 }
 
 // ---------------- ввід ----------------
+function nearestSlot(wx, wy) {
+  let best = -1, bd = 30;
+  for (let i=0;i<3;i++) {
+    if (W.body.slots[i]) continue;
+    const s = bodySlotXY(i);
+    const d = Math.hypot(s.x-wx, s.y-wy);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+function hit(wx, wy) {
+  // спершу уламки (маленькі), потім елементи, потім тіло
+  let best=null, bd=1e9;
+  for (const f of W.frags) {
+    const d = Math.hypot(f.x-wx, f.y-wy);
+    if (d < f.r + 8 && d < bd) { bd = d; best = { kind:'frag', obj:f }; }
+  }
+  for (const e of W.els) {
+    const d = Math.hypot(e.x-wx, e.y-wy);
+    const lim = e.r + 6 + (e.ty.grip-1)*10;
+    if (d < lim && d < bd) { bd = d; best = { kind:'el', obj:e }; }
+  }
+  const B = W.body;
+  if (Math.hypot(B.x-wx, B.y-wy) < B.r*B.scale + 14 && Math.hypot(B.x-wx, B.y-wy) < bd) {
+    best = { kind:'body', obj:B };
+  }
+  return best;
+}
 function bindInput() {
   const cv = document.getElementById('cv');
   const ptrs = {};
-  const TH = 7;                       // поріг зсуву: схоплення/панорама лише після нього
+  const TH = 7;
   const toWorld = (cx, cy) => {
     const r = cv.getBoundingClientRect();
     return { x: cam.x + (cx - r.left)/cam.z, y: cam.y + (cy - r.top)/cam.z };
-  };
-  const hit = (wx, wy) => {
-    let best=null, bd=1e9;
-    for (const e of W.els) {
-      const d = Math.hypot(e.x-wx, e.y-wy);
-      if (d < e.r + 6 && d < bd) { bd = d; best = e; }
-    }
-    return best;
   };
   const setPos = (id, x, y) => {
     const p = ptrs[id]; if (!p) return;
     p.px = p.x; p.py = p.y; p.x = x; p.y = y;
     if (!p.moved && Math.hypot(x-p.sx, y-p.sy) > TH) p.moved = true;
   };
-  const grabEl = (p) => {
+  const grab = (p) => {
     const w = toWorld(p.x, p.y);
-    const el = hit(w.x, w.y);
-    if (el) {
-      dragEl = el; dragDX = el.x - w.x; dragDY = el.y - w.y;
-      el._dvx = 0; el._dvy = 0;
+    const h = hit(w.x, w.y);
+    if (h) {
+      dragEl = h;
+      if (h.kind === 'el') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; h.obj._dvx = 0; h.obj._dvy = 0; }
+      if (h.kind === 'frag') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; }
+      if (h.kind === 'body') { dragEl.dx = h.obj.x - w.x; dragEl.dy = h.obj.y - w.y; }
       return true;
     }
     return false;
@@ -763,7 +1176,7 @@ function bindInput() {
   const pinchStart = () => {
     const ids = Object.keys(ptrs);
     if (ids.length !== 2) return;
-    if (dragEl) { dragEl.vx = dragEl._dvx||0; dragEl.vy = dragEl._dvy||0; dragEl = null; }
+    if (dragEl) { dragEl = null; }
     const r = cv.getBoundingClientRect();
     const a = ptrs[ids[0]], b = ptrs[ids[1]];
     pinch = {
@@ -780,7 +1193,6 @@ function bindInput() {
     const d = Math.max(8, Math.hypot(a.x-b.x, a.y-b.y));
     const z = Math.max(0.3, Math.min(2.4, pinch.z0 * d / pinch.d));
     cam.z = z;
-    // світова точка під серединою жестів лишається під пальцями
     const wmx = pinch.cx0 + pinch.mx / pinch.z0;
     const wmy = pinch.cy0 + pinch.my / pinch.z0;
     cam.x = wmx - pinch.mx / z;
@@ -796,26 +1208,24 @@ function bindInput() {
       return;
     }
     if (!p.moved) return;
+    if (p.longT) { clearTimeout(p.longT); p.longT = null; }
     if (dragEl) {
       const w = toWorld(x, y);
-      const nx = w.x + dragDX, ny = w.y + dragDY;
-      dragEl._dvx = (nx - dragEl.x) * 60;
-      dragEl._dvy = (ny - dragEl.y) * 60;
-      dragEl.x = nx; dragEl.y = ny;
-      dragEl.vx = 0; dragEl.vy = 0;
-      clamp(dragEl);
-    } else {
-      if (p.onEl && !p.tried) { p.tried = true; if (!grabEl(p)) p.onEl = false; }
-      if (dragEl) {
-        const w = toWorld(x, y);
-        const nx = w.x + dragDX, ny = w.y + dragDY;
-        dragEl._dvx = (nx - dragEl.x) * 60;
-        dragEl._dvy = (ny - dragEl.y) * 60;
-        dragEl.x = nx; dragEl.y = ny;
-        dragEl.vx = 0; dragEl.vy = 0;
-        clamp(dragEl);
-        return;
+      const o = dragEl.obj;
+      const nx = w.x + dragEl.dx, ny = w.y + dragEl.dy;
+      if (dragEl.kind === 'el') {
+        o._dvx = (nx - o.x) * 60; o._dvy = (ny - o.y) * 60;
+        o.x = nx; o.y = ny; o.vx = 0; o.vy = 0;
+        clampEl(o);
+      } else if (dragEl.kind === 'frag') {
+        o.x = nx; o.y = ny;
+      } else {
+        o.x = nx; o.y = ny; o.vx = 0; o.vy = 0;
+        clampBody();
       }
+    } else {
+      if (p.onEl && !p.tried) { p.tried = true; if (!grab(p)) p.onEl = false; }
+      if (dragEl) return;
       cam.x -= (p.x - p.px) / cam.z;
       cam.y -= (p.y - p.py) / cam.z;
       if (window.__clampCam) window.__clampCam();
@@ -824,30 +1234,63 @@ function bindInput() {
   const release = (id) => {
     const p = ptrs[id]; delete ptrs[id];
     if (Object.keys(ptrs).length < 2) pinch = null;
-    if (dragEl && p) {
-      if (p.moved) {
-        dragEl.vx = Math.max(-520, Math.min(520, dragEl._dvx||0));
-        dragEl.vy = Math.max(-520, Math.min(520, dragEl._dvy||0));
-      } else { dragEl.vx = 0; dragEl.vy = 0; }
-      // злипання при відпусканні поруч
-      let target=null, bd=1e9;
-      for (const e of W.els) {
-        if (e===dragEl) continue;
-        const d = Math.hypot(e.x-dragEl.x, e.y-dragEl.y);
-        const lim = (e.r + dragEl.r) * CFG.SNAP;
-        if (d < lim && d < bd) { bd = d; target = e; }
+    if (p && p.longT) { clearTimeout(p.longT); p.longT = null; }
+    // тап без зсуву: спершу слоти тіла (незалежно від того, що захоплено — els може перекривати слот)
+    if (p && !p.moved) {
+      const w = toWorld(p.x, p.y);
+      for (let i=0;i<3;i++) {
+        const s = bodySlotXY(i);
+        if (Math.hypot(s.x-w.x, s.y-w.y) < 26 && W.body.slots[i]) { ejectSlot(i); break; }
       }
-      if (target) tryBond(dragEl, target);
       dragEl = null;
+      return;
     }
+    if (dragEl && p) {
+      if (dragEl.kind === 'frag') {
+        // вставити в слот тіла, якщо відпустили над ним
+        const slot = nearestSlot(dragEl.obj.x, dragEl.obj.y);
+        if (slot >= 0) {
+          insertFrag(dragEl.obj, slot);
+          dragEl = null;
+          return;
+        }
+      }
+      if (dragEl.kind === 'el') {
+        dragEl.obj.vx = Math.max(-520, Math.min(520, dragEl.obj._dvx||0));
+        dragEl.obj.vy = Math.max(-520, Math.min(520, dragEl.obj._dvy||0));
+        // злипання при відпусканні поруч (link)
+        if (dragEl.obj.ty.props.some(p=>p.k==='link')) {
+          let target=null, bd2=1e9;
+          for (const e of W.els) {
+            if (e===dragEl.obj) continue;
+            const d = Math.hypot(e.x-dragEl.obj.x, e.y-dragEl.obj.y);
+            const lim = (e.r + dragEl.obj.r) * CFG.SNAP * dragEl.obj.ty.grip;
+            if (d < lim && d < bd2) { bd2 = d; target = e; }
+          }
+          if (target) tryBond(dragEl.obj, target, (dragEl.obj.r + target.r) * CFG.SNAP * dragEl.obj.ty.grip);
+        }
+      }
+      dragEl = null;
+      return;
+    }
+  };
+  const longPress = (p) => {
+    const w = toWorld(p.x, p.y);
+    const h = hit(w.x, w.y);
+    if (!h) return;
+    if (h.kind === 'el') dismantle(h.obj);
+    else if (h.kind === 'body') { ejectAllBody(); }
   };
   // тач
   cv.addEventListener('touchstart', e => {
     e.preventDefault();
     for (const t of e.changedTouches) {
       const w = toWorld(t.clientX, t.clientY);
-      const el = hit(w.x, w.y);
-      ptrs[t.identifier] = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!el, tried:false };
+      const h = hit(w.x, w.y);
+      const p = { x:t.clientX, y:t.clientY, sx:t.clientX, sy:t.clientY, px:t.clientX, py:t.clientY, moved:false, onEl:!!h, tried:false, longT:null };
+      p.longT = setTimeout(()=>{ if (ptrs[t.identifier]) longPress(p); }, 450);
+      ptrs[t.identifier] = p;
+      grab(p);   // захоплення одразу за стартовою точкою (маленькі уламки інакше губимо)
     }
     if (Object.keys(ptrs).length === 2) pinchStart();
   }, {passive:false});
@@ -858,16 +1301,19 @@ function bindInput() {
   cv.addEventListener('touchend', e => {
     for (const t of e.changedTouches) release(t.identifier);
   });
-  // миша/тачпад
+  // миша
   cv.addEventListener('mousedown', e => {
     if (e.button !== 0) return;
     const w = toWorld(e.clientX, e.clientY);
-    const el = hit(w.x, w.y);
-    ptrs[0] = { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, px:e.clientX, py:e.clientY, moved:false, onEl:!!el, tried:false };
+    const h = hit(w.x, w.y);
+    const p = { x:e.clientX, y:e.clientY, sx:e.clientX, sy:e.clientY, px:e.clientX, py:e.clientY, moved:false, onEl:!!h, tried:false, longT:null };
+    p.longT = setTimeout(()=>{ if (ptrs[0]) longPress(p); }, 450);
+    ptrs[0] = p;
+    grab(p);   // захоплення одразу за стартовою точкою
   });
   window.addEventListener('mousemove', e => { if (ptrs[0]) move(0, e.clientX, e.clientY); });
   window.addEventListener('mouseup', e => { if (ptrs[0]) release(0); });
-  // колесо слухаємо на window: зум завжди наш, браузер сторінку не зумить
+  // колесо
   const clampCam = () => {
     const vw = window.innerWidth, vh = window.innerHeight;
     const cz = cam.z;
@@ -881,13 +1327,11 @@ function bindInput() {
     e.preventDefault();
     let dy = e.deltaY;
     if (e.ctrlKey) {
-      // тачпад-щипок: браузери шлють сирі дрібні значення — без масштабування режимів
       dy = dy * 30;
     } else {
-      if (e.deltaMode === 1) dy *= 16;        // рядки
-      else if (e.deltaMode === 2) dy *= 120;  // сторінки
+      if (e.deltaMode === 1) dy *= 16;
+      else if (e.deltaMode === 2) dy *= 120;
     }
-    // чистий горизонтальний свайп двома пальцями = карта вбік
     if (!e.ctrlKey && Math.abs(e.deltaX) > Math.abs(dy)*1.2 && Math.abs(dy) < 10) {
       cam.x += e.deltaX / cam.z;
       clampCam();
@@ -895,7 +1339,6 @@ function bindInput() {
     }
     const rect = cv.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-    // безпечний крок: не більше ×2 за подію (захист від дивних драйверів)
     const f = Math.max(0.5, Math.min(2, Math.exp(-dy * 0.002)));
     const z2 = Math.max(0.3, Math.min(3.2, cam.z * f));
     cam.x += mx/cam.z - mx/z2;
@@ -903,13 +1346,13 @@ function bindInput() {
     cam.z = z2;
     clampCam();
   }, {passive:false});
-  // hover: показує, що під курсором можна тягнути
+  // hover
   cv.addEventListener('mousemove', e => {
     if (ptrs[0]) return;
     const w = toWorld(e.clientX, e.clientY);
-    const el = hit(w.x, w.y);
-    W.hover = el;
-    cv.style.cursor = el ? 'grab' : 'default';
+    const h = hit(w.x, w.y);
+    W.hover = h;
+    cv.style.cursor = h ? 'grab' : 'default';
   });
   cv.addEventListener('mouseleave', () => { W.hover = null; cv.style.cursor = 'default'; });
 }
@@ -948,15 +1391,26 @@ window.__G = {
     const comps = W && W.els ? components() : [];
     return {
       seed: W.seed, t: Math.round(W.t*10)/10, mode: W.mode,
-      types: W.types.map(t=>({ name:t.name, color:t.color, shape:t.shape, props:t.props.map(propText) })),
-      els: W.els.length, drops: W.drops.length, events: W.events.slice(0,5).map(e=>e.text),
+      types: W.types.map(t=>({ name:t.name, color:t.color, shape:t.pts.length, props:t.props.map(propText) })),
+      els: W.els.length, frags: W.frags.map(f=>({ role:f.role, props:f.props.map(propText) })),
+      drops: W.drops.length, events: W.events.slice(0,5).map(e=>e.text),
       bonds: W.els.reduce((m,e)=>m+e.bonds.length,0)/2,
       bodies: comps.filter(c=>c.length>=2).map(c=>c.length).sort((a,b)=>b-a),
       moved: W.els.reduce((m,e)=>Math.max(m, Math.hypot(e.vx,e.vy)), 0),
+      body: {
+        x: Math.round(W.body.x), y: Math.round(W.body.y),
+        active: W.body.active, energy: Math.round(W.body.energy*10)/10,
+        slots: W.body.slots.map(s=>s?{role:s.role, props:s.props.map(propText)}:null),
+        vx: Math.round(W.body.vx), vy: Math.round(W.body.vy),
+      },
     };
   },
+  insertFrag(fi, slot){ const fr = W.frags[fi]; if (fr) insertFrag(fr, slot); return this.state(); },
+  eject(slot){ ejectSlot(slot); return this.state(); },
+  ejectAll(){ ejectAllBody(); return this.state(); },
+  dismantle(i){ if (i < W.els.length) dismantle(W.els[i]); return this.state(); },
   bondPair(i,j){
-    if (i<W.els.length && j<W.els.length) tryBond(W.els[i], W.els[j]);
+    if (i<W.els.length && j<W.els.length) tryBond(W.els[i], W.els[j], (W.els[i].r+W.els[j].r)*CFG.SNAP*W.els[i].ty.grip);
     return this.state();
   },
   newWorld(seed){ newWorld(seed); refreshSeed(); return this.state(); },
@@ -968,6 +1422,24 @@ window.__G = {
     const n = Math.ceil((holdSec||1)/0.016);
     for (let k=0;k<n;k++) step(0.016);
     return this.state();
+  },
+  // бот: намічене рішення — зібрати тіло з 3 уламків і перевірити, що воно ожило
+  bot(){
+    const pick = pred => W.frags.findIndex(f => f.props.some(p => pred(p)));
+    // 1) реактор ВІДШТОВХ/ПРИТЯГ (рух), 2) емітер поля, 3) будь-що
+    let a = pick(p => p.k==='react_field' && (p.eff==='repel'||p.eff==='attract'));
+    if (a < 0) a = 0;
+    let b = pick(p => p.k==='emit_field');
+    if (b < 0 || b === a) b = (a+1) % W.frags.length;
+    let c = (a!==0 && b!==0) ? 0 : ((a!==1 && b!==1) ? 1 : 2);
+    if (c === a || c === b) c = (c+1) % W.frags.length;
+    const names = [a,b,c].map(i=>W.frags[i].role);
+    this.insertFrag(a, 0); this.insertFrag(b, 1); this.insertFrag(c, 2);
+    const active = W.body.active;
+    const st0 = { x: W.body.x, y: W.body.y, vx: W.body.vx, vy: W.body.vy };
+    this.fast(3);
+    const moved = Math.hypot(W.body.x-st0.x, W.body.y-st0.y) + Math.hypot(W.body.vx-st0.vx, W.body.vy-st0.vy);
+    return { ok: active && moved > 1, active, moved: Math.round(moved*10)/10, frags: names, body: this.state().body };
   },
 };
 
